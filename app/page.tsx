@@ -40,8 +40,14 @@ export default function Dashboard() {
     try {
       const res = await fetch('/api/run', { method: 'POST' });
       if (res.ok) {
-        await fetchRuns();
+        const data = await res.json();
+        // Navigate to run detail if completed immediately
+        if (data.status === 'completed') {
+          window.location.href = `/runs/${data.id}`;
+          return;
+        }
       }
+      await fetchRuns();
     } finally {
       setLaunching(false);
     }

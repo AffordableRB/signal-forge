@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { OpportunityCandidate } from './types';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isVercel = !!process.env.VERCEL;
+const DATA_DIR = isVercel ? '/tmp' : path.resolve(process.cwd(), 'data');
 const WATCHLIST_FILE = path.join(DATA_DIR, 'watchlist.json');
 
 export interface ScoreHistoryEntry {

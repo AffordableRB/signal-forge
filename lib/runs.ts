@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { RunRecord } from './types';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isVercel = !!process.env.VERCEL;
+const DATA_DIR = isVercel ? '/tmp' : path.resolve(process.cwd(), 'data');
 const RUNS_FILE = path.join(DATA_DIR, 'runs.json');
 
 function ensureDataDir() {
