@@ -1,53 +1,38 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import { useState } from 'react';
+import { RunRecord } from '@/lib/types';
 import { StatusDot } from '@/components/status-dot';
-
-interface RunSummary {
-  id: string;
-  date: string;
-  status: 'running' | 'completed' | 'failed';
-  topScore?: number;
-  topOpportunity?: string;
-  candidateCount?: number;
-  error?: string;
-}
+import Link from 'next/link';
 
 export default function Dashboard() {
-  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [runs, setRuns] = useState<RunRecord[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const stored = sessionStorage.getItem('signalforge_runs');
+    return stored ? JSON.parse(stored) : [];
+  });
   const [launching, setLaunching] = useState(false);
 
-  const fetchRuns = useCallback(async () => {
-    const res = await fetch('/api/runs');
-    if (res.ok) setRuns(await res.json());
-  }, []);
-
-  useEffect(() => {
-    fetchRuns();
-  }, [fetchRuns]);
-
-  // Poll while any run is still running
-  useEffect(() => {
-    const hasRunning = runs.some(r => r.status === 'running');
-    if (!hasRunning) return;
-    const interval = setInterval(fetchRuns, 2000);
-    return () => clearInterval(interval);
-  }, [runs, fetchRuns]);
+  function persistRuns(updated: RunRecord[]) {
+    setRuns(updated);
+    sessionStorage.setItem('signalforge_runs', JSON.stringify(updated));
+  }
 
   async function handleRunScan() {
     setLaunching(true);
     try {
       const res = await fetch('/api/run', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        // Navigate to run detail if completed immediately
-        if (data.status === 'completed') {
-          window.location.href = `/runs/${data.id}`;
-          return;
-        }
+      const run: RunRecord = await res.json();
+
+      // Store full run data for the detail page
+      sessionStorage.setItem(`signalforge_run_${run.id}`, JSON.stringify(run));
+
+      const updated = [run, ...runs];
+      persistRuns(updated);
+
+      if (run.status === 'completed') {
+        window.location.href = `/runs/${run.id}`;
       }
-      await fetchRuns();
     } finally {
       setLaunching(false);
     }
@@ -67,7 +52,7 @@ export default function Dashboard() {
           disabled={launching}
           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
         >
-          {launching ? 'Starting...' : 'Run Scan'}
+          {launching ? 'Scanning...' : 'Run Scan'}
         </button>
       </div>
 

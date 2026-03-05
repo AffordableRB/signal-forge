@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { RunRecord, OpportunityCandidate } from '@/lib/types';
@@ -19,30 +19,20 @@ export default function RunPage() {
   const [run, setRun] = useState<RunRecord | null>(null);
   const [selected, setSelected] = useState<OpportunityCandidate | null>(null);
 
-  const fetchRun = useCallback(async () => {
-    const res = await fetch(`/api/runs/${params.id}`);
-    if (res.ok) setRun(await res.json());
+  useEffect(() => {
+    const stored = sessionStorage.getItem(`signalforge_run_${params.id}`);
+    if (stored) {
+      setRun(JSON.parse(stored));
+    }
   }, [params.id]);
 
-  useEffect(() => {
-    fetchRun();
-  }, [fetchRun]);
-
-  useEffect(() => {
-    if (!run || run.status !== 'running') return;
-    const interval = setInterval(fetchRun, 2000);
-    return () => clearInterval(interval);
-  }, [run, fetchRun]);
-
   if (!run) {
-    return <div className="text-neutral-500 text-sm">Loading...</div>;
-  }
-
-  if (run.status === 'running') {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <StatusDot status="running" />
-        <p className="text-neutral-400 text-sm">Pipeline is running...</p>
+      <div className="text-center py-24">
+        <p className="text-neutral-500 text-sm">Run not found. Run a scan from the dashboard first.</p>
+        <Link href="/" className="text-sm text-emerald-400 hover:text-emerald-300 mt-4 inline-block">
+          &larr; Go to Dashboard
+        </Link>
       </div>
     );
   }
