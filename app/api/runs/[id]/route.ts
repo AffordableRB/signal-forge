@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getRunById } from '@/lib/runs';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const run = getRunById(params.id);
+  const { id } = await params;
+  const run = getRunById(id);
   if (!run) {
     return NextResponse.json({ error: 'Run not found' }, { status: 404 });
   }
