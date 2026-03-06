@@ -75,6 +75,6 @@ export const SCAN_MODES: Record<ScanMode, ScanModeConfig> = {
     jobResultLimit: 6,
     phases: ['discovery', 'deep-evidence', 'market-mapping', 'cross-validation', 'analysis'],
     fastTimeoutMs: 12000,
-    proxyTimeoutMs: 18000,
+    proxyTimeoutMs: 25000,
   },
 };
