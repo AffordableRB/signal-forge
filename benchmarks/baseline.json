@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "createdAt": "2026-03-06T20:37:56.425Z",
+  "createdAt": "2026-03-06T20:38:29.963Z",
   "entries": [
     {
       "caseId": "missed-call-recovery",
       "score": 6.75,
       "ocean": "purple",
-      "confidence": 66,
+      "confidence": 68,
       "contradictions": 0,
       "roi": 37.59
     },
@@ -14,7 +14,7 @@
       "caseId": "legal-intake",
       "score": 6.25,
       "ocean": "purple",
-      "confidence": 72,
+      "confidence": 71,
       "contradictions": 0,
       "roi": 75.4
     },
@@ -22,7 +22,7 @@
       "caseId": "ai-resume-generator",
       "score": 3,
       "ocean": "red",
-      "confidence": 48,
+      "confidence": 53,
       "contradictions": 0,
       "roi": 11.82
     },
@@ -30,7 +30,7 @@
       "caseId": "review-response-automation",
       "score": 5.666666666666667,
       "ocean": "purple",
-      "confidence": 66,
+      "confidence": 67,
       "contradictions": 0,
       "roi": 32.57
     },
@@ -38,7 +38,7 @@
       "caseId": "hvac-dispatch",
       "score": 6.083333333333333,
       "ocean": "purple",
-      "confidence": 65,
+      "confidence": 67,
       "contradictions": 0,
       "roi": 29.91
     },
@@ -46,7 +46,7 @@
       "caseId": "ai-safety-audit-manufacturing",
       "score": 6.916666666666667,
       "ocean": "blue",
-      "confidence": 70,
+      "confidence": 72,
       "contradictions": 0,
       "roi": 20
     },
@@ -54,7 +54,7 @@
       "caseId": "commodity-crm",
       "score": 3.5,
       "ocean": "red",
-      "confidence": 52,
+      "confidence": 54,
       "contradictions": 15,
       "roi": 13.64
     },
@@ -62,7 +62,7 @@
       "caseId": "social-media-scheduler-creators",
       "score": 4.25,
       "ocean": "purple",
-      "confidence": 61,
+      "confidence": 62,
       "contradictions": 25,
       "roi": 16.82
     },
@@ -78,7 +78,7 @@
       "caseId": "freelance-lab-tech-marketplace",
       "score": 5,
       "ocean": "purple",
-      "confidence": 63,
+      "confidence": 65,
       "contradictions": 0,
       "roi": 28.27
     },
@@ -86,7 +86,7 @@
       "caseId": "print-shop-management",
       "score": 3.75,
       "ocean": "purple",
-      "confidence": 67,
+      "confidence": 68,
       "contradictions": 0,
       "roi": 9.09
     },
@@ -94,7 +94,7 @@
       "caseId": "permit-expediting-ai",
       "score": 6.666666666666667,
       "ocean": "blue",
-      "confidence": 69,
+      "confidence": 70,
       "contradictions": 15,
       "roi": 20
     },
@@ -102,7 +102,7 @@
       "caseId": "e2e-strong-opportunity",
       "score": 7.55,
       "ocean": "blue",
-      "confidence": 68,
+      "confidence": 70,
       "contradictions": 0,
       "roi": 39.3,
       "detectorScores": {
@@ -122,16 +122,16 @@
     },
     {
       "caseId": "e2e-weak-opportunity",
-      "score": 1.35,
+      "score": 1.8,
       "ocean": "purple",
-      "confidence": 42,
+      "confidence": 45,
       "contradictions": 0,
       "roi": 5.45,
       "detectorScores": {
         "demand": 3,
         "painIntensity": 0,
         "abilityToPay": 0,
-        "competitionWeakness": 1,
+        "competitionWeakness": 4,
         "easeToBuild": 5,
         "distributionAccess": 0,
         "workflowAnchor": 1,
@@ -146,7 +146,7 @@
       "caseId": "e2e-contradiction-demand-pay",
       "score": 5.083333333333333,
       "ocean": "purple",
-      "confidence": 52,
+      "confidence": 58,
       "contradictions": 25,
       "roi": 9.07
     }
