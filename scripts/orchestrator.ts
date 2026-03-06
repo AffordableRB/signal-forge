@@ -64,6 +64,19 @@ async function runScan() {
 
   const startTime = Date.now();
 
+  // Show per-job progress events
+  queue.onJobEvent((event) => {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    if (event.type === 'job:start') {
+      console.log(`    [${elapsed}s] START  ${event.jobType}`);
+    } else if (event.type === 'job:complete') {
+      const dur = event.result?.durationMs ? `${(event.result.durationMs / 1000).toFixed(1)}s` : '';
+      console.log(`    [${elapsed}s] DONE   ${event.jobType} ${dur}`);
+    } else if (event.type === 'job:fail') {
+      console.log(`    [${elapsed}s] FAIL   ${event.jobType}: ${event.error ?? 'unknown'}`);
+    }
+  });
+
   const scan = await orchestrator.runScan(mode, (progress) => {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(

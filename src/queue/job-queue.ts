@@ -10,6 +10,22 @@
 import { v4 as uuid } from 'uuid';
 import { JobResult, JobStatus, JOB_CONFIGS } from './job-types';
 
+// ─── Job event types ────────────────────────────────────────────────
+
+export type JobEventType = 'job:start' | 'job:complete' | 'job:fail';
+
+export interface JobEvent {
+  type: JobEventType;
+  jobId: string;
+  jobType: string;
+  attempt?: number;
+  maxRetries?: number;
+  result?: JobResult;
+  error?: string;
+}
+
+export type JobEventListener = (event: JobEvent) => void;
+
 export type JobExecutor<TInput, TOutput> = (input: TInput) => Promise<TOutput>;
 
 interface QueuedJob<TInput = unknown, TOutput = unknown> {
@@ -27,6 +43,17 @@ interface QueuedJob<TInput = unknown, TOutput = unknown> {
 export class JobQueue {
   private jobs: Map<string, QueuedJob> = new Map();
   private results: Map<string, JobResult> = new Map();
+  private listeners: JobEventListener[] = [];
+
+  onJobEvent(listener: JobEventListener): void {
+    this.listeners.push(listener);
+  }
+
+  private emit(event: JobEvent): void {
+    for (const listener of this.listeners) {
+      listener(event);
+    }
+  }
 
   // Enqueue a job and return its ID
   enqueue<TInput, TOutput>(
@@ -61,6 +88,14 @@ export class JobQueue {
     const start = Date.now();
     job.status = 'running';
 
+    this.emit({
+      type: 'job:start',
+      jobId,
+      jobType: job.type,
+      attempt: 1,
+      maxRetries: job.maxRetries,
+    });
+
     let lastError: string | undefined;
 
     for (let attempt = 0; attempt <= job.maxRetries; attempt++) {
@@ -88,6 +123,7 @@ export class JobQueue {
         job.status = 'completed';
         job.result = result;
         this.results.set(jobId, result);
+        this.emit({ type: 'job:complete', jobId, jobType: job.type, result });
         return result;
 
       } catch (e) {
@@ -121,6 +157,7 @@ export class JobQueue {
     job.status = result.status;
     job.result = result;
     this.results.set(jobId, result);
+    this.emit({ type: 'job:fail', jobId, jobType: job.type, result, error: lastError });
     return result;
   }
 
