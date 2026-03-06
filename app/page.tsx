@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RunRecord } from '@/lib/types';
 import { StatusDot } from '@/components/status-dot';
 import Link from 'next/link';
@@ -12,6 +12,18 @@ export default function Dashboard() {
     return stored ? JSON.parse(stored) : [];
   });
   const [launching, setLaunching] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (launching) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed(t => t + 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [launching]);
 
   function persistRuns(updated: RunRecord[]) {
     setRuns(updated);
@@ -56,7 +68,31 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {runs.length === 0 ? (
+      {launching && (
+        <div className="border border-neutral-800 rounded-lg p-8 mb-6">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <div>
+              <p className="text-neutral-200 text-sm font-medium">Scanning market signals...</p>
+              <p className="text-neutral-500 text-xs mt-0.5">{elapsed}s elapsed — collecting from Reddit, HN, Google, reviews, job boards</p>
+            </div>
+          </div>
+          <div className="w-full bg-neutral-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-emerald-500 h-full rounded-full transition-all duration-1000 ease-out"
+              style={{ width: `${Math.min(95, elapsed * 3)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-neutral-600 mt-2">
+            <span>Collecting</span>
+            <span>Clustering</span>
+            <span>Scoring</span>
+            <span>Ranking</span>
+          </div>
+        </div>
+      )}
+
+      {!launching && runs.length === 0 ? (
         <div className="border border-neutral-800 rounded-lg p-12 text-center">
           <p className="text-neutral-500 text-sm">
             No runs yet. Click &quot;Run Scan&quot; to discover opportunities.

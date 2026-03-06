@@ -46,10 +46,14 @@ export default function RunPage() {
     );
   }
 
-  const candidates = (run.candidates ?? [])
-    .filter(c => !c.rejected)
-    .sort((a, b) => b.scores.final - a.scores.final)
-    .slice(0, 10);
+  // Show accepted first, then rejected (greyed out)
+  const all = (run.candidates ?? [])
+    .sort((a, b) => {
+      if (a.rejected !== b.rejected) return a.rejected ? 1 : -1;
+      return b.scores.final - a.scores.final;
+    })
+    .slice(0, 15);
+  const candidates = all;
 
   if (selected) {
     return (
@@ -106,7 +110,7 @@ export default function RunPage() {
               <tr
                 key={c.id}
                 onClick={() => setSelected(c)}
-                className="border-b border-neutral-800/50 hover:bg-neutral-800/30 cursor-pointer transition-colors"
+                className={`border-b border-neutral-800/50 hover:bg-neutral-800/30 cursor-pointer transition-colors ${c.rejected ? 'opacity-50' : ''}`}
               >
                 <td className="px-2 py-3">
                   <StarButton candidate={c} runId={run.id} />
@@ -114,6 +118,7 @@ export default function RunPage() {
                 <td className="px-4 py-3 text-neutral-500 font-mono">{i + 1}</td>
                 <td className="px-4 py-3 text-neutral-200 font-medium max-w-xs truncate">
                   {capitalize(c.jobToBeDone)}
+                  {c.rejected && <span className="ml-2 text-xs text-red-400/70">rejected</span>}
                 </td>
                 <td className="px-4 py-3">
                   <ScoreBar score={c.scores.final} />

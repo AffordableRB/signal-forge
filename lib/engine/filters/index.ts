@@ -8,13 +8,16 @@ export function applyFilters(candidates: OpportunityCandidate[]): OpportunityCan
 function filterCandidate(candidate: OpportunityCandidate): OpportunityCandidate {
   const reasons: string[] = [];
 
-  // Rule 1: Must have demand + pain + money signals
+  // Rule 1: Must have at least 2 of 3 core signal types (demand, pain, money)
   const signalTypes = new Set(candidate.evidence.map(e => e.signalType));
-  const missingTypes = REALITY_FILTER_RULES.requireSignalTypes.filter(
-    t => !signalTypes.has(t as SignalType)
+  const presentTypes = REALITY_FILTER_RULES.requireSignalTypes.filter(
+    t => signalTypes.has(t as SignalType)
   );
-  if (missingTypes.length > 0) {
-    reasons.push(`Missing signal types: ${missingTypes.join(', ')}`);
+  if (presentTypes.length < 2) {
+    const missingTypes = REALITY_FILTER_RULES.requireSignalTypes.filter(
+      t => !signalTypes.has(t as SignalType)
+    );
+    reasons.push(`Missing signal types: ${missingTypes.join(', ')} (need at least 2 of 3)`);
   }
 
   // Rule 2: Must have a clear buyer
