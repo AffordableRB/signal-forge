@@ -21,6 +21,7 @@ export default function Dashboard() {
   });
   const [launching, setLaunching] = useState(false);
   const [scanMode, setScanMode] = useState<ScanMode>('standard');
+  const [scanError, setScanError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [currentPhase, setCurrentPhase] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -52,8 +53,13 @@ export default function Dashboard() {
 
   async function handleRunScan() {
     setLaunching(true);
+    setScanError(null);
     try {
       const res = await fetch(`/api/run?mode=${scanMode}`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `Server error (${res.status})`);
+      }
       const run: RunRecord = await res.json();
 
       sessionStorage.setItem(`signalforge_run_${run.id}`, JSON.stringify(run));
@@ -63,7 +69,11 @@ export default function Dashboard() {
 
       if (run.status === 'completed') {
         window.location.href = `/runs/${run.id}`;
+      } else if (run.status === 'failed') {
+        setScanError(run.error ?? 'Scan failed');
       }
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : 'Scan failed — the request may have timed out. Try a Quick or Standard scan.');
     } finally {
       setLaunching(false);
     }
@@ -108,10 +118,17 @@ export default function Dashboard() {
       </div>
 
       {/* Scan mode description */}
-      {!launching && (
+      {!launching && !scanError && (
         <p className="text-xs text-neutral-600 mb-4 -mt-4 text-right">
           {modeInfo.desc}
         </p>
+      )}
+
+      {scanError && (
+        <div className="border border-red-900/50 bg-red-950/20 rounded-lg p-4 mb-6">
+          <p className="text-red-400 text-sm font-medium">Scan failed</p>
+          <p className="text-red-400/70 text-xs mt-1">{scanError}</p>
+        </div>
       )}
 
       {launching && (

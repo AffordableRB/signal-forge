@@ -53,6 +53,10 @@ export async function runPipeline(
   const phases: PhaseProgress[] = [];
   let allSignals: RawSignal[] = [];
   let allStats: CollectorStat[] = [];
+  const pipelineStart = Date.now();
+  // Hard deadline: abort optional phases if we're running out of time (Vercel 60s limit)
+  const DEADLINE_MS = 52000;
+  function hasTime() { return Date.now() - pipelineStart < DEADLINE_MS; }
 
   // Helper to emit phase progress — replaces 'running' entry when completed/skipped
   function emitPhase(phase: ScanPhase, status: 'running' | 'completed' | 'skipped', durationMs: number, signalsAdded: number) {
@@ -88,7 +92,7 @@ export async function runPipeline(
   }
 
   // ─── Phase 2: Deep Evidence (deep mode only) ────────────────────
-  if (config.phases.includes('deep-evidence')) {
+  if (config.phases.includes('deep-evidence') && hasTime()) {
     const start = Date.now();
     emitPhase('deep-evidence', 'running', 0, 0);
 
@@ -121,7 +125,7 @@ export async function runPipeline(
     } catch {
       emitPhase('deep-evidence', 'completed', Date.now() - start, 0);
     }
-  } else if (mode === 'deep') {
+  } else if (config.phases.includes('deep-evidence')) {
     emitPhase('deep-evidence', 'skipped', 0, 0);
   }
 
@@ -130,7 +134,7 @@ export async function runPipeline(
   const analyzed = analyzeAll(candidates);
 
   // ─── Phase 3: Market Mapping ────────────────────────────────────
-  if (config.phases.includes('market-mapping')) {
+  if (config.phases.includes('market-mapping') && hasTime()) {
     const start = Date.now();
     emitPhase('market-mapping', 'running', 0, 0);
 
@@ -173,10 +177,12 @@ export async function runPipeline(
     } catch {
       emitPhase('market-mapping', 'completed', Date.now() - start, 0);
     }
+  } else if (config.phases.includes('market-mapping')) {
+    emitPhase('market-mapping', 'skipped', 0, 0);
   }
 
   // ─── Phase 4: Cross-Validation (deep mode only) ─────────────────
-  if (config.phases.includes('cross-validation')) {
+  if (config.phases.includes('cross-validation') && hasTime()) {
     const start = Date.now();
     emitPhase('cross-validation', 'running', 0, 0);
 
@@ -218,7 +224,7 @@ export async function runPipeline(
     } catch {
       emitPhase('cross-validation', 'completed', Date.now() - start, 0);
     }
-  } else if (mode === 'deep') {
+  } else if (config.phases.includes('cross-validation')) {
     emitPhase('cross-validation', 'skipped', 0, 0);
   }
 
