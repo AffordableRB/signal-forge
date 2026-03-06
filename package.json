@@ -16,7 +16,9 @@
     "orch:benchmark": "npx tsx scripts/orchestrator.ts benchmark",
     "orch:benchmark:e2e": "npx tsx scripts/orchestrator.ts benchmark --e2e",
     "orch:benchmark:check": "npx tsx scripts/orchestrator.ts benchmark:check",
-    "orch:benchmark:baseline": "npx tsx scripts/orchestrator.ts benchmark:baseline"
+    "orch:benchmark:baseline": "npx tsx scripts/orchestrator.ts benchmark:baseline",
+    "lanes": "bash scripts/launch-lanes.sh",
+    "lanes:4": "bash scripts/launch-lanes.sh 4"
   },
   "dependencies": {
     "next": "14.2.35",
