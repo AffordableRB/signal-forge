@@ -44,59 +44,26 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
   return union.size === 0 ? 0 : intersection.size / union.size;
 }
 
-function extractJobToBeDone(query: string, evidence: Evidence[]): string {
-  // Try to extract a meaningful job-to-be-done from evidence excerpts
-  // rather than just using the search query
-  if (evidence.length > 0) {
-    // Look for pain-point patterns in evidence
-    const painPatterns = [
-      /(?:need|want|looking for|wish there was|struggle with|problem with|frustrated with|tired of|hard to|difficult to|can't find|no good)\s+(.{10,60})/i,
-      /(?:how do I|how to|best way to)\s+(.{10,60})/i,
-    ];
+function extractJobToBeDone(query: string): string {
+  const normalized = normalizePhrase(query);
 
-    for (const e of evidence.slice(0, 5)) {
-      for (const pattern of painPatterns) {
-        const match = e.excerpt.match(pattern);
-        if (match) {
-          const extracted = match[1]
-            .replace(/[.!?,;]+$/, '')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .toLowerCase();
-          if (extracted.length >= 10 && extracted.length <= 80) {
-            return extracted;
-          }
-        }
-      }
-    }
+  // Strip noise words that come from template queries
+  const cleaned = normalized
+    .replace(/^(how to |best way to |need help with |looking for )/, '')
+    .replace(/ (software|tool|app|solution|platform|reddit|problems|complaints|reviews|alternatives|pricing|competitors|challenges|difficulties|hiring|industry|trends|market|size|regulatory|compliance|invoicing|billing|payment|management|automation|small business|2024|2025)$/g, '')
+    .replace(/ (software|problems|reddit|complaints|reviews|alternatives|pricing|competitors|challenges|difficulties) /g, ' ')
+    .replace(/"([^"]+)"/g, '$1')
+    .replace(/ or /gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-    // If no pain pattern found, use the most information-dense excerpt
-    const bestExcerpt = evidence
-      .filter(e => e.excerpt.length > 30)
-      .sort((a, b) => {
-        // Prefer pain/demand signals
-        const aScore = (a.signalType === 'pain' ? 2 : a.signalType === 'demand' ? 1 : 0);
-        const bScore = (b.signalType === 'pain' ? 2 : b.signalType === 'demand' ? 1 : 0);
-        return bScore - aScore;
-      })[0];
-
-    if (bestExcerpt) {
-      // Extract a short summary from the excerpt
-      const words = bestExcerpt.excerpt.split(/\s+/).slice(0, 10).join(' ');
-      const cleaned = words.replace(/[.!?,;:]+$/, '').toLowerCase().trim();
-      if (cleaned.length >= 10) return cleaned;
-    }
+  // If everything was stripped, fall back to first meaningful words
+  if (cleaned.length < 5) {
+    const words = normalized.split(' ').filter(w => !STOP_WORDS.has(w)).slice(0, 4);
+    return words.join(' ') || normalized;
   }
 
-  // Fallback: clean up the query
-  const normalized = normalizePhrase(query);
-  return normalized
-    .replace(/^(how to |best way to |need help with |looking for )/, '')
-    .replace(/( software| tool| app| solution| platform| reddit| problems| complaints| reviews| alternatives| pricing| competitors)$/g, '')
-    .replace(/\s+(software|problems|reddit|complaints|reviews|alternatives|pricing|competitors)\s+/g, ' ')
-    .replace(/"([^"]+)"/g, '$1')
-    .replace(/\s+or\s+/gi, ' ')
-    .trim();
+  return cleaned;
 }
 
 function inferVertical(query: string): string {
@@ -169,11 +136,14 @@ function dimensionMatch(
 }
 
 function shouldMerge(match: DimensionMatch): boolean {
-  // Require job similarity AND at least one other matching dimension
-  if (match.jobSimilarity < 0.25) return false;
+  // High similarity jobs always merge
+  if (match.jobSimilarity >= 0.5) return true;
+
+  // Medium similarity + at least one other matching dimension
+  if (match.jobSimilarity < 0.2) return false;
 
   let matchingDimensions = 0;
-  if (match.jobSimilarity >= 0.25) matchingDimensions++;
+  if (match.jobSimilarity >= 0.2) matchingDimensions++;
   if (match.sameBuyer) matchingDimensions++;
   if (match.sameVertical) matchingDimensions++;
   if (match.sameTrigger) matchingDimensions++;
@@ -185,7 +155,7 @@ function groupByMultiDimension(signals: RawSignal[]): SignalGroup[] {
   const groups: SignalGroup[] = [];
 
   for (const signal of signals) {
-    const job = extractJobToBeDone(signal.query, signal.evidence);
+    const job = extractJobToBeDone(signal.query);
     const buyer = inferBuyer(signal.query);
     const vertical = inferVertical(signal.query);
     const trigger = inferTrigger(signal.query);

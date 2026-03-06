@@ -17,12 +17,14 @@ import { synthesizeStartupConcepts, generateValidationPlan } from '@/lib/engine/
 import { computeConfidence } from '@/lib/engine/confidence/confidence-scorer';
 import { generateScoringOutput } from '@/lib/engine/confidence/scoring-output';
 import { deduplicateEvidence } from '@/lib/engine/collectors/dedup';
+import { filterSignalsByTopic } from '@/lib/engine/collectors/relevance-filter';
 import { deepValidateTop } from '@/lib/engine/validation/deep-validator';
 
 export const maxDuration = 300; // LLM analysis + deep validation needs more time
 
 interface AnalyzeRequest {
   signals: RawSignal[];
+  topic?: string;
 }
 
 function enrichCandidate(candidate: OpportunityCandidate): OpportunityCandidate {
@@ -54,11 +56,17 @@ function enrichCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
 export async function POST(req: NextRequest) {
   try {
     const body: AnalyzeRequest = await req.json();
-    const { signals } = body;
+    const { signals: rawSignals, topic } = body;
 
-    if (!signals?.length) {
+    if (!rawSignals?.length) {
       return NextResponse.json({ error: 'signals required' }, { status: 400 });
     }
+
+    // Filter by topic relevance first (removes garbage like unrelated HN posts)
+    let signals = topic ? filterSignalsByTopic(rawSignals, topic) : rawSignals;
+
+    // If filtering removed everything, fall back to unfiltered
+    if (signals.length === 0) signals = rawSignals;
 
     // Deduplicate evidence across all signals
     for (const signal of signals) {

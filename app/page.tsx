@@ -308,7 +308,7 @@ export default function Dashboard() {
         const midRes = await fetch('/api/scan/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signals: allSignals }),
+          body: JSON.stringify({ signals: allSignals, topic: scanTopic || undefined }),
         });
         if (midRes.ok) {
           const { candidates } = await midRes.json();
