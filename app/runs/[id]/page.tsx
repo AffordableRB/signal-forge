@@ -9,6 +9,13 @@ import { RiskCount } from '@/components/risk-badge';
 import { StatusDot } from '@/components/status-dot';
 import { StarButton } from '@/components/star-button';
 import { OpportunityDetail } from '@/components/opportunity-detail';
+import {
+  ScoreDistributionChart,
+  MarketTypePieChart,
+  DetectorAveragesRadar,
+  ScoreVsConfidenceChart,
+  EvidenceBreakdownChart,
+} from '@/components/charts/run-overview-charts';
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -187,6 +194,36 @@ export default function RunPage() {
         </div>
       )}
 
+      {/* Overview Charts */}
+      {candidates.length > 0 && (
+        <div className="space-y-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="border border-neutral-800 rounded-lg p-5">
+              <h3 className="text-sm font-semibold text-neutral-300 mb-3">Score Distribution</h3>
+              <ScoreDistributionChart candidates={candidates} />
+            </div>
+            <div className="border border-neutral-800 rounded-lg p-5">
+              <h3 className="text-sm font-semibold text-neutral-300 mb-3">Score vs Confidence</h3>
+              <ScoreVsConfidenceChart candidates={candidates} />
+            </div>
+            <div className="border border-neutral-800 rounded-lg p-5">
+              <h3 className="text-sm font-semibold text-neutral-300 mb-3">Detector Averages</h3>
+              <DetectorAveragesRadar candidates={candidates} />
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="border border-neutral-800 rounded-lg p-5">
+                <h3 className="text-sm font-semibold text-neutral-300 mb-3">Market Types</h3>
+                <MarketTypePieChart candidates={candidates} />
+              </div>
+              <div className="border border-neutral-800 rounded-lg p-5">
+                <h3 className="text-sm font-semibold text-neutral-300 mb-3">Evidence by Signal</h3>
+                <EvidenceBreakdownChart candidates={candidates} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="border border-neutral-800 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -202,6 +239,7 @@ export default function RunPage() {
               <th className="px-4 py-3 font-medium">Ease</th>
               <th className="px-4 py-3 font-medium">Market</th>
               <th className="px-4 py-3 font-medium">Conf</th>
+              <th className="px-4 py-3 font-medium">Verdict</th>
               <th className="px-4 py-3 font-medium">Risks</th>
             </tr>
           </thead>
@@ -257,6 +295,17 @@ export default function RunPage() {
                       'text-red-400'
                     }`}>
                       {c.confidence.overall}%
+                    </span>
+                  ) : '-'}
+                </td>
+                <td className="px-4 py-3">
+                  {c.deepValidation ? (
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                      c.deepValidation.verdict === 'GO' ? 'text-emerald-400 bg-emerald-950/40' :
+                      c.deepValidation.verdict === 'CONDITIONAL' ? 'text-amber-400 bg-amber-950/40' :
+                      'text-red-400 bg-red-950/40'
+                    }`}>
+                      {c.deepValidation.verdict}
                     </span>
                   ) : '-'}
                 </td>

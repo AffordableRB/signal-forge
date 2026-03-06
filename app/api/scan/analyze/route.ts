@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { RawSignal, OpportunityCandidate, EconomicImpact } from '@/lib/engine/models/types';
 import { clusterSignals } from '@/lib/engine/cluster';
 import { analyzeAll } from '@/lib/engine/detectors';
+import { llmAnalyzeAll } from '@/lib/engine/detectors/llm-analyzer';
+import { isLLMAvailable } from '@/lib/engine/detectors/llm-client';
 import { scoreAll, rankCandidates } from '@/lib/engine/scoring';
 import { applyFilters } from '@/lib/engine/filters';
 import { applyKillSwitch } from '@/lib/engine/reality/kill-switch';
@@ -15,8 +17,9 @@ import { synthesizeStartupConcepts, generateValidationPlan } from '@/lib/engine/
 import { computeConfidence } from '@/lib/engine/confidence/confidence-scorer';
 import { generateScoringOutput } from '@/lib/engine/confidence/scoring-output';
 import { deduplicateEvidence } from '@/lib/engine/collectors/dedup';
+import { deepValidateTop } from '@/lib/engine/validation/deep-validator';
 
-export const maxDuration = 60;
+export const maxDuration = 300; // LLM analysis + deep validation needs more time
 
 interface AnalyzeRequest {
   signals: RawSignal[];
@@ -62,13 +65,14 @@ export async function POST(req: NextRequest) {
       signal.evidence = deduplicateEvidence(signal.evidence);
     }
 
-    // Cluster & analyze
+    // Cluster & analyze (LLM if available, keyword fallback)
     const candidates = clusterSignals(signals);
-    const analyzed = analyzeAll(candidates);
-    const reanalyzed = analyzeAll(analyzed);
+    const analyzed = isLLMAvailable()
+      ? await llmAnalyzeAll(candidates)
+      : analyzeAll(candidates);
 
     // Enrich
-    const enriched = reanalyzed.map(c => enrichCandidate(c));
+    const enriched = analyzed.map(c => enrichCandidate(c));
 
     // Score
     const scored = scoreAll(enriched);
@@ -86,7 +90,12 @@ export async function POST(req: NextRequest) {
     // Rank
     const ranked = rankCandidates(filtered);
 
-    return NextResponse.json({ candidates: ranked });
+    // Deep validation on top 2 (LLM only)
+    const validated = isLLMAvailable()
+      ? await deepValidateTop(ranked, 2)
+      : ranked;
+
+    return NextResponse.json({ candidates: validated });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Analysis failed' },

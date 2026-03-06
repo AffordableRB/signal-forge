@@ -44,11 +44,58 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
   return union.size === 0 ? 0 : intersection.size / union.size;
 }
 
-function extractJobToBeDone(query: string): string {
+function extractJobToBeDone(query: string, evidence: Evidence[]): string {
+  // Try to extract a meaningful job-to-be-done from evidence excerpts
+  // rather than just using the search query
+  if (evidence.length > 0) {
+    // Look for pain-point patterns in evidence
+    const painPatterns = [
+      /(?:need|want|looking for|wish there was|struggle with|problem with|frustrated with|tired of|hard to|difficult to|can't find|no good)\s+(.{10,60})/i,
+      /(?:how do I|how to|best way to)\s+(.{10,60})/i,
+    ];
+
+    for (const e of evidence.slice(0, 5)) {
+      for (const pattern of painPatterns) {
+        const match = e.excerpt.match(pattern);
+        if (match) {
+          const extracted = match[1]
+            .replace(/[.!?,;]+$/, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+          if (extracted.length >= 10 && extracted.length <= 80) {
+            return extracted;
+          }
+        }
+      }
+    }
+
+    // If no pain pattern found, use the most information-dense excerpt
+    const bestExcerpt = evidence
+      .filter(e => e.excerpt.length > 30)
+      .sort((a, b) => {
+        // Prefer pain/demand signals
+        const aScore = (a.signalType === 'pain' ? 2 : a.signalType === 'demand' ? 1 : 0);
+        const bScore = (b.signalType === 'pain' ? 2 : b.signalType === 'demand' ? 1 : 0);
+        return bScore - aScore;
+      })[0];
+
+    if (bestExcerpt) {
+      // Extract a short summary from the excerpt
+      const words = bestExcerpt.excerpt.split(/\s+/).slice(0, 10).join(' ');
+      const cleaned = words.replace(/[.!?,;:]+$/, '').toLowerCase().trim();
+      if (cleaned.length >= 10) return cleaned;
+    }
+  }
+
+  // Fallback: clean up the query
   const normalized = normalizePhrase(query);
   return normalized
     .replace(/^(how to |best way to |need help with |looking for )/, '')
-    .replace(/( software| tool| app| solution| platform)$/, '')
+    .replace(/( software| tool| app| solution| platform| reddit| problems| complaints| reviews| alternatives| pricing| competitors)$/g, '')
+    .replace(/\s+(software|problems|reddit|complaints|reviews|alternatives|pricing|competitors)\s+/g, ' ')
+    .replace(/"([^"]+)"/g, '$1')
+    .replace(/\s+or\s+/gi, ' ')
     .trim();
 }
 
@@ -64,6 +111,14 @@ function inferVertical(query: string): string {
     'finance': ['accounting', 'bookkeep', 'invoice', 'payment', 'fintech'],
     'education': ['course', 'tutoring', 'education', 'training', 'learning'],
     'recruitment': ['hiring', 'recruit', 'resume', 'job board', 'talent'],
+    'pet-care': ['pet', 'veterinar', 'vet ', 'grooming', 'dog', 'cat', 'animal', 'kennel', 'boarding', 'pet care'],
+    'fitness': ['fitness', 'gym', 'workout', 'personal train', 'coach', 'yoga', 'crossfit'],
+    'restaurant': ['restaurant', 'food', 'catering', 'kitchen', 'chef', 'dining', 'bar '],
+    'construction': ['construction', 'building', 'general contractor', 'subcontract', 'remodel'],
+    'automotive': ['auto', 'car ', 'mechanic', 'dealership', 'vehicle', 'fleet'],
+    'beauty': ['salon', 'beauty', 'spa ', 'barber', 'nail', 'hair', 'cosmetic'],
+    'logistics': ['shipping', 'logistics', 'freight', 'warehouse', 'delivery', 'supply chain'],
+    'agriculture': ['farm', 'agriculture', 'crop', 'livestock', 'ranch'],
   };
 
   for (const [vertical, keywords] of Object.entries(verticals)) {
@@ -130,7 +185,7 @@ function groupByMultiDimension(signals: RawSignal[]): SignalGroup[] {
   const groups: SignalGroup[] = [];
 
   for (const signal of signals) {
-    const job = extractJobToBeDone(signal.query);
+    const job = extractJobToBeDone(signal.query, signal.evidence);
     const buyer = inferBuyer(signal.query);
     const vertical = inferVertical(signal.query);
     const trigger = inferTrigger(signal.query);
