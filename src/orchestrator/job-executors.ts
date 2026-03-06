@@ -8,6 +8,8 @@ import { createCollectorById, CollectorStat } from '../../lib/engine/collectors'
 import { deduplicateEvidence } from '../../lib/engine/collectors/dedup';
 import { clusterSignals } from '../../lib/engine/cluster';
 import { analyzeAll } from '../../lib/engine/detectors';
+import { llmAnalyzeAll } from '../../lib/engine/detectors/llm-analyzer';
+import { isLLMAvailable } from '../../lib/engine/detectors/llm-client';
 import { scoreAll, rankCandidates } from '../../lib/engine/scoring';
 import { applyFilters } from '../../lib/engine/filters';
 import { applyKillSwitch } from '../../lib/engine/reality/kill-switch';
@@ -61,7 +63,9 @@ export async function executeClusterJob(input: ClusterJobInput): Promise<Cluster
 // ─── Detection executor ─────────────────────────────────────────────
 
 export async function executeAnalyzeJob(input: AnalyzeJobInput): Promise<AnalyzeJobOutput> {
-  const analyzed = analyzeAll(input.candidates);
+  const analyzed = isLLMAvailable()
+    ? await llmAnalyzeAll(input.candidates)
+    : analyzeAll(input.candidates);
   return { candidates: analyzed };
 }
 
@@ -113,9 +117,11 @@ export async function executeFullAnalysis(signals: RawSignal[]): Promise<Opportu
   // Cluster
   const candidates = clusterSignals(signals);
 
-  // Detect
-  const analyzed = analyzeAll(candidates);
-  const reanalyzed = analyzeAll(analyzed);
+  // Detect (LLM if available, keyword fallback)
+  const analyzed = isLLMAvailable()
+    ? await llmAnalyzeAll(candidates)
+    : analyzeAll(candidates);
+  const reanalyzed = analyzed; // LLM already does full analysis; keyword mode re-runs for consistency
 
   // Enrich
   const enriched = reanalyzed.map(c => enrichCandidate(c));

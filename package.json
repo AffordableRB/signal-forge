@@ -24,6 +24,7 @@
     "lanes:4": "bash scripts/launch-lanes.sh 4"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "next": "14.2.35",
     "p-limit": "^7.3.0",
     "react": "^18",

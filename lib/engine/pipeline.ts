@@ -5,6 +5,8 @@ import { OpportunityCandidate, EconomicImpact, RawSignal } from './models/types'
 import { collectAllSignals, CollectorStat } from './collectors';
 import { clusterSignals } from './cluster';
 import { analyzeAll } from './detectors';
+import { llmAnalyzeAll } from './detectors/llm-analyzer';
+import { isLLMAvailable } from './detectors/llm-client';
 import { scoreAll, rankCandidates } from './scoring';
 import { applyFilters } from './filters';
 import { applyKillSwitch } from './reality/kill-switch';
@@ -131,7 +133,9 @@ export async function runPipeline(
 
   // ─── Cluster & Analyze ──────────────────────────────────────────
   const candidates = clusterSignals(allSignals);
-  const analyzed = analyzeAll(candidates);
+  const analyzed = isLLMAvailable()
+    ? await llmAnalyzeAll(candidates)
+    : analyzeAll(candidates);
 
   // ─── Phase 3: Market Mapping ────────────────────────────────────
   if (config.phases.includes('market-mapping') && hasTime()) {
@@ -232,8 +236,10 @@ export async function runPipeline(
   const analysisStart = Date.now();
   emitPhase('analysis', 'running', 0, 0);
 
-  // Re-analyze after evidence enrichment
-  const reanalyzed = analyzeAll(analyzed);
+  // Re-analyze after evidence enrichment (LLM if available)
+  const reanalyzed = isLLMAvailable()
+    ? await llmAnalyzeAll(analyzed)
+    : analyzeAll(analyzed);
 
   // Enrich
   const enriched = reanalyzed.map(c => enrichCandidate(c));
