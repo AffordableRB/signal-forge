@@ -89,6 +89,62 @@ export default function RunPage() {
         <StatusDot status={run.status} />
       </div>
 
+      {/* Collector Stats */}
+      {run.collectorStats && run.collectorStats.length > 0 && (
+        <div className="border border-neutral-800 rounded-lg p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-neutral-300">Collection Summary</h3>
+            <span className="text-xs text-neutral-500">
+              {run.collectorStats.reduce((s, c) => s + c.signalCount, 0)} total signals
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            {run.collectorStats.map(stat => (
+              <div
+                key={stat.id}
+                className={`rounded p-3 border ${
+                  stat.status === 'success' && stat.signalCount > 0
+                    ? 'border-emerald-900/30 bg-emerald-950/10'
+                    : stat.status === 'timeout'
+                    ? 'border-amber-900/30 bg-amber-950/10'
+                    : 'border-red-900/30 bg-red-950/10'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-neutral-300 capitalize">{stat.id}</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                    stat.status === 'success' && stat.signalCount > 0
+                      ? 'text-emerald-400 bg-emerald-950/40'
+                      : stat.status === 'timeout'
+                      ? 'text-amber-400 bg-amber-950/40'
+                      : 'text-red-400 bg-red-950/40'
+                  }`}>
+                    {stat.status === 'success' && stat.signalCount === 0 ? 'empty' : stat.status}
+                  </span>
+                </div>
+                <div className="text-lg font-bold font-mono text-neutral-100">
+                  {stat.signalCount}
+                </div>
+                <div className="text-[10px] text-neutral-500">
+                  {(stat.durationMs / 1000).toFixed(1)}s
+                  {stat.error && stat.status !== 'timeout' && (
+                    <span className="text-red-400 ml-1">— {stat.error.slice(0, 40)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {run.queriesUsed && (
+            <div>
+              <span className="text-xs text-neutral-500">Queries: </span>
+              <span className="text-xs text-neutral-400">
+                {run.queriesUsed.join(' · ')}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="border border-neutral-800 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>

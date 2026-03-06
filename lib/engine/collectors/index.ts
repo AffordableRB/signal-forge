@@ -10,6 +10,14 @@ import { PricingCollector } from './pricing';
 import { deduplicateEvidence } from './dedup';
 import { RawSignal } from '../models/types';
 
+export interface CollectorStat {
+  id: string;
+  signalCount: number;
+  status: 'success' | 'failed' | 'timeout';
+  durationMs: number;
+  error?: string;
+}
+
 // Fast collectors (direct APIs, no proxy needed) — run first
 function createFastCollectors(): Collector[] {
   return [
@@ -31,24 +39,60 @@ function createProxyCollectors(): Collector[] {
 }
 
 // Wrap a collector with a timeout so one slow source doesn't block everything
-function withTimeout(collector: Collector, ms: number): Collector {
+interface TimedCollector {
+  id: string;
+  collect(queries: string[]): Promise<{ signals: RawSignal[]; stat: CollectorStat }>;
+}
+
+function withTimeout(collector: Collector, ms: number): TimedCollector {
   return {
     id: collector.id,
-    async collect(queries: string[]): Promise<RawSignal[]> {
-      return Promise.race([
-        collector.collect(queries),
-        new Promise<RawSignal[]>(resolve =>
-          setTimeout(() => {
-            console.warn(`[${collector.id}] Timed out after ${ms}ms`);
-            resolve([]);
-          }, ms)
-        ),
-      ]);
+    async collect(queries: string[]): Promise<{ signals: RawSignal[]; stat: CollectorStat }> {
+      const start = Date.now();
+      let timedOut = false;
+
+      try {
+        const signals = await Promise.race([
+          collector.collect(queries),
+          new Promise<RawSignal[]>((_, reject) =>
+            setTimeout(() => {
+              timedOut = true;
+              reject(new Error('timeout'));
+            }, ms)
+          ),
+        ]);
+
+        return {
+          signals,
+          stat: {
+            id: collector.id,
+            signalCount: signals.length,
+            status: 'success',
+            durationMs: Date.now() - start,
+          },
+        };
+      } catch (e) {
+        return {
+          signals: [],
+          stat: {
+            id: collector.id,
+            signalCount: 0,
+            status: timedOut ? 'timeout' : 'failed',
+            durationMs: Date.now() - start,
+            error: e instanceof Error ? e.message : 'Unknown error',
+          },
+        };
+      }
     },
   };
 }
 
-export async function collectAllSignals(queries: string[]): Promise<RawSignal[]> {
+export interface CollectionResult {
+  signals: RawSignal[];
+  collectorStats: CollectorStat[];
+}
+
+export async function collectAllSignals(queries: string[]): Promise<CollectionResult> {
   const fast = createFastCollectors().map(c => withTimeout(c, 25000));
   const proxy = createProxyCollectors().map(c => withTimeout(c, 40000));
 
@@ -59,9 +103,21 @@ export async function collectAllSignals(queries: string[]): Promise<RawSignal[]>
   );
 
   const allSignals: RawSignal[] = [];
-  for (const result of results) {
+  const collectorStats: CollectorStat[] = [];
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
     if (result.status === 'fulfilled') {
-      allSignals.push(...result.value);
+      allSignals.push(...result.value.signals);
+      collectorStats.push(result.value.stat);
+    } else {
+      collectorStats.push({
+        id: all[i].id,
+        signalCount: 0,
+        status: 'failed',
+        durationMs: 0,
+        error: result.reason?.message ?? 'Unknown',
+      });
     }
   }
 
@@ -70,5 +126,5 @@ export async function collectAllSignals(queries: string[]): Promise<RawSignal[]>
     signal.evidence = deduplicateEvidence(signal.evidence);
   }
 
-  return allSignals;
+  return { signals: allSignals, collectorStats };
 }

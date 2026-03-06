@@ -2,7 +2,7 @@
 // Full pipeline: collect → cluster → analyze → enrich → score → filter → rank
 
 import { OpportunityCandidate } from './models/types';
-import { collectAllSignals } from './collectors';
+import { collectAllSignals, CollectorStat } from './collectors';
 import { clusterSignals } from './cluster';
 import { analyzeAll } from './detectors';
 import { scoreAll, rankCandidates } from './scoring';
@@ -24,12 +24,14 @@ export interface PipelineResult {
   topScore: number;
   topOpportunity: string;
   candidateCount: number;
+  collectorStats: CollectorStat[];
+  queriesUsed: string[];
 }
 
 export async function runPipeline(): Promise<PipelineResult> {
   // 1. Collect (limit queries for serverless timeout)
   const queries = SEED_QUERIES.slice(0, WEB_QUERY_LIMIT);
-  const signals = await collectAllSignals(queries);
+  const { signals, collectorStats } = await collectAllSignals(queries);
 
   // 2. Cluster
   const candidates = clusterSignals(signals);
@@ -56,6 +58,8 @@ export async function runPipeline(): Promise<PipelineResult> {
     topScore: accepted[0]?.scores.final ?? 0,
     topOpportunity: accepted[0]?.jobToBeDone ?? 'N/A',
     candidateCount: ranked.length,
+    collectorStats,
+    queriesUsed: queries,
   };
 }
 

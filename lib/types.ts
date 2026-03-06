@@ -116,6 +116,14 @@ export interface OpportunityCandidate {
   validationPlan?: ValidationPlan;
 }
 
+export interface CollectorStat {
+  id: string;
+  signalCount: number;
+  status: 'success' | 'failed' | 'timeout';
+  durationMs: number;
+  error?: string;
+}
+
 export interface RunRecord {
   id: string;
   date: string;
@@ -124,5 +132,7 @@ export interface RunRecord {
   topOpportunity?: string;
   candidateCount?: number;
   candidates?: OpportunityCandidate[];
+  collectorStats?: CollectorStat[];
+  queriesUsed?: string[];
   error?: string;
 }

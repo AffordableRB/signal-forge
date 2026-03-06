@@ -17,7 +17,7 @@ async function main() {
   console.log(`Testing ${TEST_SEEDS.length} seed queries...\n`);
 
   const startTime = Date.now();
-  const signals = await collectAllSignals(TEST_SEEDS);
+  const { signals, collectorStats } = await collectAllSignals(TEST_SEEDS);
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
   // Aggregate all evidence
@@ -48,7 +48,16 @@ async function main() {
   console.log(`Evidence (deduped): ${deduped.length}`);
   console.log('');
 
-  console.log('--- By Collector ---');
+  console.log('--- Collector Results ---');
+  for (const stat of collectorStats) {
+    const icon = stat.status === 'success' && stat.signalCount > 0 ? '✓' : stat.status === 'timeout' ? '⏱' : '✗';
+    const dur = (stat.durationMs / 1000).toFixed(1);
+    const err = stat.error && stat.status !== 'timeout' ? ` (${stat.error.slice(0, 50)})` : '';
+    console.log(`  ${icon} ${stat.id.padEnd(20)} ${String(stat.signalCount).padStart(3)} signals  ${dur.padStart(5)}s  ${stat.status}${err}`);
+  }
+  console.log('');
+
+  console.log('--- By Collector (evidence count) ---');
   for (const [id, count] of Object.entries(byCollector).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${id.padEnd(20)} ${count}`);
   }

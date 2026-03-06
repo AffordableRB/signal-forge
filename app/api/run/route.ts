@@ -24,6 +24,8 @@ export async function POST() {
       candidateCount: result.candidateCount,
       topScore: sorted[0]?.scores.final ?? 0,
       topOpportunity: sorted[0]?.jobToBeDone ?? 'N/A',
+      collectorStats: result.collectorStats,
+      queriesUsed: result.queriesUsed,
     };
 
     return NextResponse.json(run);
