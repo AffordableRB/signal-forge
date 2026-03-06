@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ScanOrchestrator } from '../src/orchestrator';
-import { InMemoryScanStore } from '../src/state/scan-store';
+import { FileScanStore } from '../src/state/file-scan-store';
 import { JobQueue } from '../src/queue/job-queue';
 import {
   runBenchmarkSuite,
@@ -58,11 +58,24 @@ async function runScan() {
 
   console.log(`\n=== SignalForge Orchestrator — ${mode.toUpperCase()} scan ===\n`);
 
-  const store = new InMemoryScanStore();
+  const store = new FileScanStore();
   const queue = new JobQueue();
   const orchestrator = new ScanOrchestrator(store, queue);
 
   const startTime = Date.now();
+
+  // Show per-job progress events
+  queue.onJobEvent((event) => {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    if (event.type === 'job:start') {
+      console.log(`    [${elapsed}s] START  ${event.jobType}`);
+    } else if (event.type === 'job:complete') {
+      const dur = event.result?.durationMs ? `${(event.result.durationMs / 1000).toFixed(1)}s` : '';
+      console.log(`    [${elapsed}s] DONE   ${event.jobType} ${dur}`);
+    } else if (event.type === 'job:fail') {
+      console.log(`    [${elapsed}s] FAIL   ${event.jobType}: ${event.error ?? 'unknown'}`);
+    }
+  });
 
   const scan = await orchestrator.runScan(mode, (progress) => {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
