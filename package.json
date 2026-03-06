@@ -17,6 +17,8 @@
     "orch:benchmark:e2e": "npx tsx scripts/orchestrator.ts benchmark --e2e",
     "orch:benchmark:check": "npx tsx scripts/orchestrator.ts benchmark:check",
     "orch:benchmark:baseline": "npx tsx scripts/orchestrator.ts benchmark:baseline",
+    "orch:collector:health": "npx tsx scripts/orchestrator.ts collector:health",
+    "orch:integration": "npx tsx scripts/orchestrator.ts integration",
     "lanes": "bash scripts/launch-lanes.sh",
     "lanes:4": "bash scripts/launch-lanes.sh 4"
   },

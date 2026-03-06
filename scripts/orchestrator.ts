@@ -23,6 +23,8 @@ import {
 import type { BaselineData } from '../benchmarks/benchmark-runner';
 import { BENCHMARK_CASES, E2E_BENCHMARK_CASES } from '../benchmarks/cases';
 import type { ScanMode } from '../src/orchestrator/scan-phases';
+import { runCollectorHealthChecks } from '../benchmarks/collector-health';
+import { runIntegrationTest } from '../benchmarks/integration-test';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -264,6 +266,39 @@ async function saveBaseline() {
   console.log('');
 }
 
+// ─── Collector health check command ──────────────────────────────────
+
+async function runCollectorHealth() {
+  console.log('\n=== SignalForge Collector Health Check ===\n');
+  const result = runCollectorHealthChecks();
+  for (const r of result.results) {
+    const icon = r.passed ? 'PASS' : 'FAIL';
+    console.log(`  ${icon}  ${r.collectorId}`);
+    for (const chk of r.checks.filter(c => !c.passed)) {
+      const detail = chk.detail ? ` (${chk.detail})` : '';
+      console.log(`       FAIL: ${chk.check}${detail}`);
+    }
+  }
+  console.log(`\n=== ${result.passed} passed, ${result.failed} failed out of ${result.total} ===\n`);
+  if (result.failed > 0) process.exit(1);
+}
+
+// ─── Integration test command ───────────────────────────────────────
+
+async function runIntegration() {
+  console.log('\n=== SignalForge Integration Test (quick scan) ===\n');
+  const result = await runIntegrationTest();
+  for (const r of result.results) {
+    const icon = r.passed ? 'PASS' : 'FAIL';
+    const detail = r.detail ? ` (${r.detail})` : '';
+    console.log(`  ${icon}  ${r.check}${detail}`);
+  }
+  const dur = (result.durationMs / 1000).toFixed(1);
+  const status = result.passed ? 'PASSED' : 'FAILED';
+  console.log(`\n=== ${status} in ${dur}s ===\n`);
+  if (!result.passed) process.exit(1);
+}
+
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -281,6 +316,8 @@ Commands:
 
   benchmark:check          Check for regressions against baseline
   benchmark:baseline       Save current results as new baseline
+  collector:health         Run collector structure health checks
+  integration              Run integration test (quick scan + validation)
 
 Examples:
   npx tsx scripts/orchestrator.ts scan
@@ -305,6 +342,12 @@ Examples:
       break;
     case 'benchmark:baseline':
       await saveBaseline();
+      break;
+    case 'collector:health':
+      await runCollectorHealth();
+      break;
+    case 'integration':
+      await runIntegration();
       break;
     default:
       console.error(`Unknown command: ${command}. Run with --help for usage.`);
