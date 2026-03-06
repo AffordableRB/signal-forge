@@ -36,7 +36,8 @@ export class PricingCollector implements Collector {
 
     const signals: RawSignal[] = [];
 
-    for (const query of queries) {
+    // Limit to 2 queries to stay within timeout (each = 1 proxy request to Google)
+    for (const query of queries.slice(0, 2)) {
       const evidence = await this.fetchPricingSignals(query);
       if (evidence.length > 0) {
         signals.push({
@@ -53,10 +54,8 @@ export class PricingCollector implements Collector {
 
   private async fetchPricingSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
-    await Promise.allSettled([
-      this.scrapePricingSearch(query, evidence),
-      this.scrapePricingComplaints(query, evidence),
-    ]);
+    // Only run the pricing search (skip complaints search to save proxy time)
+    await this.scrapePricingSearch(query, evidence);
     return evidence;
   }
 

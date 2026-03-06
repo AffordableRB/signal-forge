@@ -1,6 +1,6 @@
 import { Collector } from './base';
 import { RawSignal, Evidence } from '../models/types';
-import { throttledFetchJson } from './rate-limiter';
+import { throttledFetchJson, hasProxyKey } from './rate-limiter';
 import { classifySignal, computeConfidence } from './classify';
 
 const TARGET_SUBREDDITS = [
@@ -52,11 +52,13 @@ export class RedditCollector implements Collector {
   private async fetchRedditSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Search across Reddit
+    // Search across Reddit — route through proxy if available (Reddit blocks cloud IPs)
     try {
       const searchUrl = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&limit=25&sort=relevance&t=year`;
+      const useProxy = hasProxyKey();
       const data = await throttledFetchJson<RedditListing>(searchUrl, {
         headers: { 'Accept': 'application/json' },
+        useProxy,
       });
 
       const queryKeywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
@@ -103,6 +105,7 @@ export class RedditCollector implements Collector {
         const subUrl = `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&limit=10&sort=relevance&t=year`;
         const data = await throttledFetchJson<RedditListing>(subUrl, {
           headers: { 'Accept': 'application/json' },
+          useProxy: hasProxyKey(),
         });
 
         const subQueryKeywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);

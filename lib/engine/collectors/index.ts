@@ -21,7 +21,6 @@ export interface CollectorStat {
 // Fast collectors (direct APIs, no proxy needed) — run first
 function createFastCollectors(): Collector[] {
   return [
-    new RedditCollector(),
     new HackerNewsCollector(),
     new SearchIntentCollector(),
     new GoogleTrendsCollector(),
@@ -29,8 +28,10 @@ function createFastCollectors(): Collector[] {
 }
 
 // Slow collectors (need proxy, may take 10-30s per request)
+// Reddit moved here — Reddit blocks cloud IPs, needs proxy
 function createProxyCollectors(): Collector[] {
   return [
+    new RedditCollector(),
     new ReviewCollector(),
     new UpworkCollector(),
     new ProductHuntCollector(),
