@@ -24,8 +24,38 @@ export function getSourceWeight(source: string): number {
   return 0.5; // default
 }
 
+// Compute source credibility for a single piece of evidence (0-1)
+export function computeSourceCredibility(evidence: { source: string; excerpt: string; confidence?: number; sourceTier?: 1 | 2 | 3 }): number {
+  let credibility = 0.5;
+
+  if (evidence.sourceTier === 1) credibility += 0.2;
+  else if (evidence.sourceTier === 2) credibility += 0.1;
+
+  const sourceW = getSourceWeight(evidence.source);
+  credibility += (sourceW - 0.5) * 0.2;
+
+  const excerptLen = evidence.excerpt.length;
+  if (excerptLen > 200) credibility += 0.1;
+  else if (excerptLen > 100) credibility += 0.05;
+  else if (excerptLen < 30) credibility -= 0.1;
+
+  if (/\$[\d,]+|\d+%|\d+\s*(users|customers|employees|companies|hours|minutes)/i.test(evidence.excerpt)) {
+    credibility += 0.1;
+  }
+
+  if (/\b(I|we|our|my)\b.{0,30}\b(use|used|tried|switched|built|spent|pay|paid|manage|run)\b/i.test(evidence.excerpt)) {
+    credibility += 0.05;
+  }
+
+  if (evidence.confidence !== undefined) {
+    credibility += (evidence.confidence - 0.5) * 0.1;
+  }
+
+  return Math.max(0, Math.min(1, credibility));
+}
+
 // Compute weighted evidence quality score (0-100)
-export function computeEvidenceQualityScore(evidence: Array<{ source: string; confidence?: number; sourceTier?: 1|2|3 }>): number {
+export function computeEvidenceQualityScore(evidence: Array<{ source: string; excerpt: string; confidence?: number; sourceTier?: 1|2|3 }>): number {
   if (evidence.length === 0) return 0;
 
   let totalWeight = 0;
@@ -33,7 +63,8 @@ export function computeEvidenceQualityScore(evidence: Array<{ source: string; co
     const sourceW = getSourceWeight(e.source);
     const tierW = e.sourceTier === 1 ? 1.0 : e.sourceTier === 2 ? 0.7 : 0.4;
     const confW = e.confidence ?? 0.5;
-    totalWeight += sourceW * tierW * confW;
+    const credW = computeSourceCredibility(e);
+    totalWeight += sourceW * tierW * confW * (0.7 + 0.3 * credW);
   }
 
   const avgWeight = totalWeight / evidence.length;
