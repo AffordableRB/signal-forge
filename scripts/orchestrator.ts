@@ -22,6 +22,7 @@ import {
 } from '../benchmarks/benchmark-runner';
 import type { BaselineData } from '../benchmarks/benchmark-runner';
 import { BENCHMARK_CASES, E2E_BENCHMARK_CASES } from '../benchmarks/cases';
+import { runCollectorHealthChecks } from '../benchmarks/collector-health';
 import type { ScanMode } from '../src/orchestrator/scan-phases';
 
 const args = process.argv.slice(2);
@@ -63,6 +64,19 @@ async function runScan() {
   const orchestrator = new ScanOrchestrator(store, queue);
 
   const startTime = Date.now();
+
+  // Show per-job progress events
+  queue.onJobEvent((event) => {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    if (event.type === 'job:start') {
+      console.log(`    [${elapsed}s] START  ${event.jobType}`);
+    } else if (event.type === 'job:complete') {
+      const dur = event.result?.durationMs ? `${(event.result.durationMs / 1000).toFixed(1)}s` : '';
+      console.log(`    [${elapsed}s] DONE   ${event.jobType} ${dur}`);
+    } else if (event.type === 'job:fail') {
+      console.log(`    [${elapsed}s] FAIL   ${event.jobType}: ${event.error ?? 'unknown'}`);
+    }
+  });
 
   const scan = await orchestrator.runScan(mode, (progress) => {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -264,6 +278,29 @@ async function saveBaseline() {
   console.log('');
 }
 
+// ─── Collector health check command ──────────────────────────────────
+
+async function runCollectorHealth() {
+  console.log(`\n=== SignalForge Collector Health Check ===\n`);
+
+  const result = runCollectorHealthChecks();
+
+  for (const r of result.results) {
+    const icon = r.passed ? 'PASS' : 'FAIL';
+    console.log(`  ${icon}  ${r.collectorId}`);
+
+    const failedChecks = r.checks.filter(c => !c.passed);
+    for (const c of failedChecks) {
+      const detail = c.detail ? ` (${c.detail})` : '';
+      console.log(`       FAIL: ${c.check}${detail}`);
+    }
+  }
+
+  console.log(`\n=== ${result.passed} passed, ${result.failed} failed out of ${result.total} ===\n`);
+
+  if (result.failed > 0) process.exit(1);
+}
+
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -281,6 +318,7 @@ Commands:
 
   benchmark:check          Check for regressions against baseline
   benchmark:baseline       Save current results as new baseline
+  collector:health         Run collector structure health checks
 
 Examples:
   npx tsx scripts/orchestrator.ts scan
@@ -305,6 +343,9 @@ Examples:
       break;
     case 'benchmark:baseline':
       await saveBaseline();
+      break;
+    case 'collector:health':
+      await runCollectorHealth();
       break;
     default:
       console.error(`Unknown command: ${command}. Run with --help for usage.`);
