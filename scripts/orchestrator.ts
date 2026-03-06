@@ -23,6 +23,7 @@ import {
 import type { BaselineData } from '../benchmarks/benchmark-runner';
 import { BENCHMARK_CASES, E2E_BENCHMARK_CASES } from '../benchmarks/cases';
 import { runCollectorHealthChecks } from '../benchmarks/collector-health';
+import { runIntegrationTest } from '../benchmarks/integration-test';
 import type { ScanMode } from '../src/orchestrator/scan-phases';
 
 const args = process.argv.slice(2);
@@ -301,6 +302,68 @@ async function runCollectorHealth() {
   if (result.failed > 0) process.exit(1);
 }
 
+// ─── Integration test command ────────────────────────────────────────
+
+async function runIntegration() {
+  console.log('\n=== SignalForge Integration Test (quick scan) ===\n');
+  const result = await runIntegrationTest();
+  for (const r of result.results) {
+    const icon = r.passed ? 'PASS' : 'FAIL';
+    const detail = r.detail ? ` (${r.detail})` : '';
+    console.log(`  ${icon}  ${r.check}${detail}`);
+  }
+  const dur = (result.durationMs / 1000).toFixed(1);
+  const status = result.passed ? 'PASSED' : 'FAILED';
+  console.log(`\n=== ${status} in ${dur}s ===\n`);
+  if (!result.passed) process.exit(1);
+}
+
+// ─── Benchmark history command ───────────────────────────────────────
+
+async function recordBenchmarkHistory() {
+  const allCases = [...BENCHMARK_CASES, ...E2E_BENCHMARK_CASES];
+  console.log('\n=== Recording Benchmark History ===\n');
+
+  const result = runBenchmarkSuite(allCases);
+  const historyPath = path.resolve(__dirname, '..', 'docs', 'benchmark-history.md');
+
+  const date = new Date().toISOString().split('T')[0];
+  const time = new Date().toISOString().split('T')[1].split('.')[0];
+  const lines: string[] = [
+    `## ${date} ${time}`,
+    '',
+    `| Case | Score | Ocean | Confidence | ROI | Status |`,
+    `|------|-------|-------|------------|-----|--------|`,
+  ];
+
+  for (const r of result.results) {
+    const status = r.passed ? 'PASS' : 'FAIL';
+    const e2e = r.detectorScores ? ' [E2E]' : '';
+    lines.push(`| ${r.name}${e2e} | ${r.score.toFixed(1)} | ${r.ocean} | ${r.confidence}% | ${r.roi.toFixed(1)}x | ${status} |`);
+  }
+
+  lines.push('');
+  lines.push(`**Summary:** ${result.passed}/${result.total} passed`);
+  lines.push('');
+
+  let history = '';
+  try {
+    history = fs.readFileSync(historyPath, 'utf-8');
+  } catch {
+    history = '# Benchmark History\n\n<!-- BENCHMARK_HISTORY_START -->\n<!-- BENCHMARK_HISTORY_END -->\n';
+  }
+
+  const marker = '<!-- BENCHMARK_HISTORY_START -->';
+  const entry = lines.join('\n');
+  history = history.replace(marker, marker + '\n' + entry);
+
+  fs.writeFileSync(historyPath, history, 'utf-8');
+
+  console.log(`Appended ${result.total} results to docs/benchmark-history.md`);
+  console.log(`${result.passed} passed, ${result.failed} failed`);
+  console.log('');
+}
+
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -318,7 +381,9 @@ Commands:
 
   benchmark:check          Check for regressions against baseline
   benchmark:baseline       Save current results as new baseline
+  benchmark:history        Record benchmark results to docs/benchmark-history.md
   collector:health         Run collector structure health checks
+  integration              Run integration test (quick scan + validation)
 
 Examples:
   npx tsx scripts/orchestrator.ts scan
@@ -346,6 +411,12 @@ Examples:
       break;
     case 'collector:health':
       await runCollectorHealth();
+      break;
+    case 'integration':
+      await runIntegration();
+      break;
+    case 'benchmark:history':
+      await recordBenchmarkHistory();
       break;
     default:
       console.error(`Unknown command: ${command}. Run with --help for usage.`);

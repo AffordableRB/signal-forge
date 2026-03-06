@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "createdAt": "2026-03-06T20:27:38.645Z",
+  "createdAt": "2026-03-06T21:32:43.099Z",
   "entries": [
     {
       "caseId": "missed-call-recovery",
       "score": 6.75,
       "ocean": "purple",
-      "confidence": 68,
+      "confidence": 67,
       "contradictions": 0,
       "roi": 37.59
     },
@@ -22,7 +22,7 @@
       "caseId": "ai-resume-generator",
       "score": 3,
       "ocean": "red",
-      "confidence": 53,
+      "confidence": 52,
       "contradictions": 0,
       "roi": 11.82
     },
@@ -30,7 +30,7 @@
       "caseId": "review-response-automation",
       "score": 5.666666666666667,
       "ocean": "purple",
-      "confidence": 67,
+      "confidence": 66,
       "contradictions": 0,
       "roi": 32.57
     },
@@ -38,7 +38,7 @@
       "caseId": "hvac-dispatch",
       "score": 6.083333333333333,
       "ocean": "purple",
-      "confidence": 67,
+      "confidence": 66,
       "contradictions": 0,
       "roi": 29.91
     },
@@ -46,7 +46,7 @@
       "caseId": "ai-safety-audit-manufacturing",
       "score": 6.916666666666667,
       "ocean": "blue",
-      "confidence": 72,
+      "confidence": 71,
       "contradictions": 0,
       "roi": 20
     },
@@ -54,7 +54,7 @@
       "caseId": "commodity-crm",
       "score": 3.5,
       "ocean": "red",
-      "confidence": 54,
+      "confidence": 53,
       "contradictions": 15,
       "roi": 13.64
     },
@@ -62,7 +62,7 @@
       "caseId": "social-media-scheduler-creators",
       "score": 4.25,
       "ocean": "purple",
-      "confidence": 62,
+      "confidence": 61,
       "contradictions": 25,
       "roi": 16.82
     },
@@ -94,7 +94,7 @@
       "caseId": "permit-expediting-ai",
       "score": 6.666666666666667,
       "ocean": "blue",
-      "confidence": 70,
+      "confidence": 69,
       "contradictions": 15,
       "roi": 20
     },
@@ -124,7 +124,7 @@
       "caseId": "e2e-weak-opportunity",
       "score": 1.8,
       "ocean": "purple",
-      "confidence": 45,
+      "confidence": 44,
       "contradictions": 0,
       "roi": 5.45,
       "detectorScores": {
@@ -146,7 +146,7 @@
       "caseId": "e2e-contradiction-demand-pay",
       "score": 5.083333333333333,
       "ocean": "purple",
-      "confidence": 58,
+      "confidence": 57,
       "contradictions": 25,
       "roi": 9.07
     }
