@@ -22,6 +22,7 @@ export interface DetectorResult {
   detectorId: string;
   score: number;
   explanation: string;
+  confidence?: number;
 }
 
 export interface RiskFlag {
@@ -44,6 +45,9 @@ export interface MarketStructure {
   maturityLevel: 'nascent' | 'emerging' | 'growing' | 'mature' | 'declining';
   innovationGap: number;
   pricingSimilarity: number;
+  confidence?: number;
+  adjacentCompetitorDensity?: number;
+  featureOverlapScore?: number;
 }
 
 export interface PurpleOpportunity {
@@ -54,6 +58,13 @@ export interface PurpleOpportunity {
   impact: number;
 }
 
+export interface ScenarioEstimate {
+  timeCostHoursPerMonth: number;
+  laborCostPerMonth: number;
+  revenueLossPerMonth: number;
+  totalMonthlyCost: number;
+}
+
 export interface EconomicImpact {
   timeCostHoursPerMonth: number;
   laborCostPerMonth: [number, number];
@@ -61,6 +72,12 @@ export interface EconomicImpact {
   totalMonthlyCost: [number, number];
   economicPainScore: number;
   explanation: string;
+  conservative?: ScenarioEstimate;
+  base?: ScenarioEstimate;
+  aggressive?: ScenarioEstimate;
+  impliedROIMultiple?: number;
+  paybackPeriodMonths?: number;
+  confidence?: number;
 }
 
 export interface MarketSize {
@@ -94,6 +111,31 @@ export interface ValidationPlan {
   sevenDayPlan: string[];
 }
 
+export interface Contradiction {
+  id: string;
+  description: string;
+  severity: 'low' | 'medium' | 'high';
+  fields: [string, string];
+}
+
+export interface ConfidenceBreakdown {
+  overall: number;
+  evidenceQuality: number;
+  signalRelevance: number;
+  contradictionScore: number;
+  dataFreshness: number;
+  detectorConfidence: Record<string, number>;
+  contradictions: { contradictions: Contradiction[]; contradictionScore: number };
+  excludedEvidence: number;
+}
+
+export interface ScoringOutput {
+  topReasons: string[];
+  bottomReasons: string[];
+  evidenceQualitySummary: string;
+  excludedNoiseSummary: string;
+}
+
 export interface OpportunityCandidate {
   id: string;
   vertical: string;
@@ -114,6 +156,8 @@ export interface OpportunityCandidate {
   momentum?: Momentum;
   startupConcepts?: StartupConcept[];
   validationPlan?: ValidationPlan;
+  confidence?: ConfidenceBreakdown;
+  scoringOutput?: ScoringOutput;
 }
 
 export interface CollectorStat {

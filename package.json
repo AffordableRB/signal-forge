@@ -7,13 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "scan:test": "npx tsx scripts/scan-test.ts"
+    "scan:test": "npx tsx scripts/scan-test.ts",
+    "benchmark": "npx tsx scripts/benchmark.ts"
   },
   "dependencies": {
     "next": "14.2.35",
     "p-limit": "^7.3.0",
     "react": "^18",
     "react-dom": "^18",
+    "recharts": "^3.7.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

@@ -159,6 +159,7 @@ export default function RunPage() {
               <th className="px-4 py-3 font-medium">Comp</th>
               <th className="px-4 py-3 font-medium">Ease</th>
               <th className="px-4 py-3 font-medium">Market</th>
+              <th className="px-4 py-3 font-medium">Conf</th>
               <th className="px-4 py-3 font-medium">Risks</th>
             </tr>
           </thead>
@@ -203,6 +204,17 @@ export default function RunPage() {
                       'text-red-400 bg-red-950/40'
                     }`}>
                       {c.marketStructure.type}
+                    </span>
+                  ) : '-'}
+                </td>
+                <td className="px-4 py-3">
+                  {c.confidence ? (
+                    <span className={`text-xs font-mono ${
+                      c.confidence.overall >= 70 ? 'text-emerald-400' :
+                      c.confidence.overall >= 50 ? 'text-amber-400' :
+                      'text-red-400'
+                    }`}>
+                      {c.confidence.overall}%
                     </span>
                   ) : '-'}
                 </td>

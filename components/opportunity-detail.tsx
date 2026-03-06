@@ -6,6 +6,7 @@ import { RiskBadge } from './risk-badge';
 import { StarButton } from './star-button';
 import { WhyThisExists } from './why-this-exists';
 import { EvidenceTimeline } from './evidence-timeline';
+import { AnalystView } from './analyst-view';
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -61,6 +62,15 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
             {ms && (
               <span className={`px-2.5 py-1 text-xs font-medium rounded border ${OCEAN_COLORS[ms.type]}`}>
                 {ms.type.toUpperCase()} OCEAN
+              </span>
+            )}
+            {c.confidence && (
+              <span className={`px-2.5 py-1 text-xs font-medium rounded border ${
+                c.confidence.overall >= 70 ? 'text-emerald-400 bg-emerald-950/30 border-emerald-900/30' :
+                c.confidence.overall >= 50 ? 'text-amber-400 bg-amber-950/30 border-amber-900/30' :
+                'text-red-400 bg-red-950/30 border-red-900/30'
+              }`}>
+                {c.confidence.overall}% confidence
               </span>
             )}
             <span className="text-sm text-neutral-500">{c.targetBuyer}</span>
@@ -290,6 +300,9 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
 
       {/* Evidence Timeline */}
       <EvidenceTimeline evidence={c.evidence} />
+
+      {/* Analyst View — Charts & Confidence Metrics */}
+      <AnalystView candidate={c} />
 
       {/* Validation Plan */}
       {plan && (

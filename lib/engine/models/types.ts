@@ -30,6 +30,7 @@ export interface DetectorResult {
   detectorId: string;
   score: number; // 0-10
   explanation: string;
+  confidence?: number; // 0-100
 }
 
 export interface RiskFlag {
@@ -54,6 +55,9 @@ export interface MarketStructure {
   maturityLevel: 'nascent' | 'emerging' | 'growing' | 'mature' | 'declining';
   innovationGap: number; // 0-10
   pricingSimilarity: number; // 0-10 (10 = all same pricing)
+  confidence?: number; // 0-100
+  adjacentCompetitorDensity?: number; // 0-10
+  featureOverlapScore?: number; // 0-10
 }
 
 export interface PurpleOpportunity {
@@ -64,6 +68,13 @@ export interface PurpleOpportunity {
   impact: number; // 0-10
 }
 
+export interface ScenarioEstimate {
+  timeCostHoursPerMonth: number;
+  laborCostPerMonth: number;
+  revenueLossPerMonth: number;
+  totalMonthlyCost: number;
+}
+
 export interface EconomicImpact {
   timeCostHoursPerMonth: number;
   laborCostPerMonth: [number, number]; // [low, high]
@@ -71,6 +82,13 @@ export interface EconomicImpact {
   totalMonthlyCost: [number, number]; // [low, high]
   economicPainScore: number; // 0-10
   explanation: string;
+  // V2 scenario modeling
+  conservative?: ScenarioEstimate;
+  base?: ScenarioEstimate;
+  aggressive?: ScenarioEstimate;
+  impliedROIMultiple?: number;
+  paybackPeriodMonths?: number;
+  confidence?: number; // 0-100
 }
 
 export interface MarketSize {
@@ -104,6 +122,31 @@ export interface ValidationPlan {
   sevenDayPlan: string[];
 }
 
+export interface Contradiction {
+  id: string;
+  description: string;
+  severity: 'low' | 'medium' | 'high';
+  fields: [string, string];
+}
+
+export interface ConfidenceBreakdown {
+  overall: number; // 0-100
+  evidenceQuality: number; // 0-100
+  signalRelevance: number; // 0-100
+  contradictionScore: number; // 0-100 (higher = more contradictions = worse)
+  dataFreshness: number; // 0-100
+  detectorConfidence: Record<string, number>; // per-detector 0-100
+  contradictions: { contradictions: Contradiction[]; contradictionScore: number };
+  excludedEvidence: number;
+}
+
+export interface ScoringOutput {
+  topReasons: string[];
+  bottomReasons: string[];
+  evidenceQualitySummary: string;
+  excludedNoiseSummary: string;
+}
+
 export interface OpportunityCandidate {
   id: string;
   vertical: string;
@@ -126,6 +169,9 @@ export interface OpportunityCandidate {
   momentum?: Momentum;
   startupConcepts?: StartupConcept[];
   validationPlan?: ValidationPlan;
+  // Confidence & objectivity layer
+  confidence?: ConfidenceBreakdown;
+  scoringOutput?: ScoringOutput;
 }
 
 export interface PipelineContext {
