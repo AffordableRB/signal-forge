@@ -1,10 +1,14 @@
 // Shared rate limiter and fetch wrapper for all collectors.
-// Uses p-limit for concurrency control and adds retry + timeout.
-// Routes through ScraperAPI proxy when SCRAPER_API_KEY is set.
+// Separate concurrency pools for direct and proxy requests
+// so slow proxy calls don't block fast direct API calls.
 
 import pLimit from 'p-limit';
 
-const limit = pLimit(3);
+// Direct requests (Reddit JSON, HN Algolia, Google autocomplete) — fast
+const directLimit = pLimit(5);
+
+// Proxy requests (ScraperAPI) — slower, fewer concurrent
+const proxyLimit = pLimit(3);
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
@@ -13,23 +17,26 @@ interface FetchOptions {
   headers?: Record<string, string>;
   // Set true to route through ScraperAPI proxy (for bot-protected sites)
   useProxy?: boolean;
+  // Set true for JS-rendered pages (costs 5 credits instead of 1 on ScraperAPI)
+  render?: boolean;
 }
 
-function getProxyUrl(targetUrl: string): string | null {
+function getProxyUrl(targetUrl: string, render?: boolean): string | null {
   const apiKey = process.env.SCRAPER_API_KEY;
   if (!apiKey) return null;
-  return `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
+  let proxyUrl = `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}`;
+  if (render) proxyUrl += '&render=true';
+  return proxyUrl;
 }
 
 async function fetchWithTimeout(url: string, opts: FetchOptions = {}): Promise<Response> {
   const controller = new AbortController();
-  // Proxy requests need more time (ScraperAPI can take 10-30s)
-  const timeout = opts.timeout ?? (opts.useProxy ? 30000 : 10000);
+  const timeout = opts.timeout ?? (opts.useProxy ? 25000 : 8000);
   const timer = setTimeout(() => controller.abort(), timeout);
 
   let fetchUrl = url;
   if (opts.useProxy) {
-    const proxied = getProxyUrl(url);
+    const proxied = getProxyUrl(url, opts.render);
     if (proxied) {
       fetchUrl = proxied;
     }
@@ -55,7 +62,8 @@ export function hasProxyKey(): boolean {
 }
 
 export async function throttledFetch(url: string, opts: FetchOptions = {}): Promise<Response> {
-  return limit(() => fetchWithTimeout(url, opts));
+  const limiter = opts.useProxy ? proxyLimit : directLimit;
+  return limiter(() => fetchWithTimeout(url, opts));
 }
 
 export async function throttledFetchJson<T = unknown>(url: string, opts: FetchOptions = {}): Promise<T> {

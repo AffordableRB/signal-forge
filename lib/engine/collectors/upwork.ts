@@ -3,22 +3,23 @@ import { RawSignal, Evidence } from '../models/types';
 import { throttledFetchText, hasProxyKey } from './rate-limiter';
 import { classifySignal, computeConfidence } from './classify';
 
-// Scrapes Upwork job search results for demand and money signals.
-// Requires SCRAPER_API_KEY to bypass bot protection.
+// Job board collector — searches Indeed for demand/money signals.
+// Companies actively hiring for solutions = validated demand.
+// Requires SCRAPER_API_KEY for proxy access.
 
 export class UpworkCollector implements Collector {
-  id = 'upwork';
+  id = 'jobs';
 
   async collect(queries: string[]): Promise<RawSignal[]> {
     if (!hasProxyKey()) {
-      console.warn('[UpworkCollector] Skipped — set SCRAPER_API_KEY to enable');
+      console.warn('[JobsCollector] Skipped — set SCRAPER_API_KEY to enable');
       return [];
     }
 
     const signals: RawSignal[] = [];
 
     for (const query of queries) {
-      const evidence = await this.fetchUpworkSignals(query);
+      const evidence = await this.fetchJobSignals(query);
       if (evidence.length > 0) {
         signals.push({
           collectorId: this.id,
@@ -32,82 +33,51 @@ export class UpworkCollector implements Collector {
     return signals;
   }
 
-  private async fetchUpworkSignals(query: string): Promise<Evidence[]> {
+  private async fetchJobSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
+    // Search Indeed for job postings related to the query
     try {
-      const url = `https://www.upwork.com/search/jobs/?q=${encodeURIComponent(query)}&sort=recency`;
+      const url = `https://www.indeed.com/jobs?q=${encodeURIComponent(query)}&sort=date`;
       const html = await throttledFetchText(url, { useProxy: true });
 
-      // Extract job cards from Upwork's HTML
-      const jobBlocks = this.extractMatches(html, [
-        /<section[^>]*class="[^"]*job-tile[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
-        /<div[^>]*class="[^"]*job-tile[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-        /<article[^>]*>([\s\S]*?)<\/article>/gi,
+      // Extract job cards
+      const jobCards = this.extractMatches(html, [
+        /<td[^>]*class="[^"]*resultContent[^"]*"[^>]*>([\s\S]*?)<\/td>/gi,
+        /<div[^>]*class="[^"]*job_seen_beacon[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+        /<h2[^>]*class="[^"]*jobTitle[^"]*"[^>]*>([\s\S]*?)<\/h2>/gi,
       ]);
 
-      // Also get individual fields
-      const jobTitles = this.extractMatches(html, [
-        /<h2[^>]*>([\s\S]*?)<\/h2>/gi,
-        /<a[^>]*class="[^"]*job-title[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+      const snippets = this.extractMatches(html, [
+        /<div[^>]*class="[^"]*job-snippet[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+        /<span[^>]*class="[^"]*salary[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
       ]);
 
-      const descriptions = this.extractMatches(html, [
-        /<span[^>]*class="[^"]*job-description[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-        /<p[^>]*data-test="[^"]*UpCLineClamp[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
-        /<span[^>]*data-test="[^"]*Description[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-      ]);
+      const allSnippets = [...jobCards, ...snippets];
 
-      const budgets = this.extractMatches(html, [
-        /<span[^>]*class="[^"]*budget[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-        /<strong[^>]*data-test="[^"]*budget[^"]*"[^>]*>([\s\S]*?)<\/strong>/gi,
-      ]);
+      for (const snippet of allSnippets.slice(0, 10)) {
+        const clean = this.stripHtml(snippet);
+        if (clean.length < 15 || clean.length > 600) continue;
 
-      // Process job blocks first (most complete)
-      for (const block of jobBlocks.slice(0, 10)) {
-        const clean = this.stripHtml(block);
-        if (clean.length < 20) continue;
-
-        const hasBudget = /\$\d/.test(clean);
+        const hasSalary = /\$[\d,]+/.test(clean);
+        const signalType = classifySignal(clean);
 
         evidence.push({
-          source: 'upwork:jobs',
+          source: 'indeed:jobs',
           url,
           excerpt: `Job: ${clean.slice(0, 280)}`,
-          signalType: hasBudget ? 'money' : 'demand',
+          signalType: hasSalary ? 'money' : (signalType === 'pain' ? 'pain' : 'demand'),
           sourceTier: 1,
           confidence: computeConfidence(clean, 0.8, 0.9),
           timestamp: Date.now(),
         });
       }
 
-      // If no job blocks, try individual fields
-      if (evidence.length === 0) {
-        const allSnippets = [...jobTitles, ...descriptions];
-        const hasBudgets = budgets.some(b => /\$\d/.test(b));
-
-        for (const snippet of allSnippets.slice(0, 8)) {
-          const clean = this.stripHtml(snippet);
-          if (clean.length < 10 || clean.length > 500) continue;
-
-          evidence.push({
-            source: 'upwork:jobs',
-            url,
-            excerpt: `Job post: ${clean.slice(0, 250)}${hasBudgets ? ' [Budget signals found]' : ''}`,
-            signalType: hasBudgets ? 'money' : (classifySignal(clean) === 'pain' ? 'pain' : 'demand'),
-            sourceTier: 1,
-            confidence: computeConfidence(clean, 0.8, 0.9),
-            timestamp: Date.now(),
-          });
-        }
-      }
-
-      // Emit aggregate signal if jobs found
       if (evidence.length > 0) {
         evidence.push({
-          source: 'upwork:analysis',
+          source: 'indeed:analysis',
           url,
-          excerpt: `Found ${evidence.length} active job postings for "${query}" on Upwork — companies are actively hiring for this solution.`,
+          excerpt: `Found ${evidence.length} active job postings for "${query}" — companies are hiring for this, validating market demand.`,
           signalType: 'demand',
           sourceTier: 1,
           confidence: 0.85,
@@ -115,7 +85,7 @@ export class UpworkCollector implements Collector {
         });
       }
     } catch (err) {
-      console.warn('[UpworkCollector] Failed:', (err as Error).message);
+      console.warn('[JobsCollector] Indeed failed:', (err as Error).message);
     }
 
     return evidence;

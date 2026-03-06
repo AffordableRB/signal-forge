@@ -49,8 +49,8 @@ function withTimeout(collector: Collector, ms: number): Collector {
 }
 
 export async function collectAllSignals(queries: string[]): Promise<RawSignal[]> {
-  const fast = createFastCollectors().map(c => withTimeout(c, 15000));
-  const proxy = createProxyCollectors().map(c => withTimeout(c, 20000));
+  const fast = createFastCollectors().map(c => withTimeout(c, 25000));
+  const proxy = createProxyCollectors().map(c => withTimeout(c, 40000));
 
   // Run fast and proxy collectors simultaneously
   const all = [...fast, ...proxy];

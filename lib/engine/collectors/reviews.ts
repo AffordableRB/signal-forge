@@ -76,7 +76,7 @@ export class ReviewCollector implements Collector {
   private async scrapeCapterra(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const url = `https://www.capterra.com/search/?query=${encodeURIComponent(query)}`;
-      const html = await throttledFetchText(url, { useProxy: true });
+      const html = await throttledFetchText(url, { useProxy: true, render: true });
 
       const snippets = this.extractTextSnippets(html, [
         /<div[^>]*class="[^"]*review[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
