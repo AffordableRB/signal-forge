@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ScanOrchestrator } from '../src/orchestrator';
-import { InMemoryScanStore } from '../src/state/scan-store';
+import { FileScanStore } from '../src/state/file-scan-store';
 import { JobQueue } from '../src/queue/job-queue';
 import {
   runBenchmarkSuite,
@@ -58,7 +58,7 @@ async function runScan() {
 
   console.log(`\n=== SignalForge Orchestrator — ${mode.toUpperCase()} scan ===\n`);
 
-  const store = new InMemoryScanStore();
+  const store = new FileScanStore();
   const queue = new JobQueue();
   const orchestrator = new ScanOrchestrator(store, queue);
 
