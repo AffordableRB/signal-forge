@@ -13,6 +13,7 @@
     "orch:scan": "npx tsx scripts/orchestrator.ts scan",
     "orch:scan:quick": "npx tsx scripts/orchestrator.ts scan --mode quick",
     "orch:scan:deep": "npx tsx scripts/orchestrator.ts scan --mode deep",
+    "orch:scan:thorough": "npx tsx scripts/orchestrator.ts scan --mode thorough",
     "orch:benchmark": "npx tsx scripts/orchestrator.ts benchmark",
     "orch:benchmark:e2e": "npx tsx scripts/orchestrator.ts benchmark --e2e",
     "orch:benchmark:check": "npx tsx scripts/orchestrator.ts benchmark:check",

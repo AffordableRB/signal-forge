@@ -10,6 +10,7 @@ import { v4 as uuid } from 'uuid';
 import { RawSignal, OpportunityCandidate } from '../../lib/engine/models/types';
 import { CollectorStat } from '../../lib/engine/collectors';
 import { SEED_QUERIES } from '../../lib/engine/config/seed-queries';
+import { generateQueries } from '../../lib/engine/config/query-generator';
 import { deduplicateEvidence } from '../../lib/engine/collectors/dedup';
 import { ScanPhase, ScanMode, PHASE_SEQUENCE, isValidTransition } from './scan-phases';
 import { ScanRecord, PhaseRecord, createScanRecord } from './scan-record';
@@ -69,6 +70,14 @@ const DEPTH_CONFIGS: Record<ScanMode, DepthConfig> = {
     pricingQueryCount: 3,
     jobResultLimit: 10,
   },
+  thorough: {
+    queryCount: 12,
+    redditResultLimit: 50,
+    subredditDepth: 5,
+    reviewSnippetLimit: 20,
+    pricingQueryCount: 4,
+    jobResultLimit: 10,
+  },
 };
 
 // ─── Progress callback ──────────────────────────────────────────────
@@ -97,10 +106,20 @@ export class ScanOrchestrator {
   async runScan(
     mode: ScanMode,
     onProgress?: ProgressCallback,
+    topic?: string,
   ): Promise<ScanRecord> {
     const scanId = uuid();
     const depth = DEPTH_CONFIGS[mode];
-    const queries = SEED_QUERIES.slice(0, depth.queryCount);
+
+    // Generate queries: topic-focused if provided, seed queries otherwise
+    let queries: string[];
+    if (topic) {
+      console.log(`[Orchestrator] Generating queries for topic: "${topic}"`);
+      queries = await generateQueries(topic, depth.queryCount);
+    } else {
+      queries = SEED_QUERIES.slice(0, depth.queryCount);
+    }
+
     const scan = createScanRecord(scanId, mode, queries);
 
     await this.store.createScan(scan);
@@ -134,7 +153,7 @@ export class ScanOrchestrator {
               break;
 
             case 'DEEP_EVIDENCE':
-              await this.runDeepEvidence(scan, queries, depth, allSignals, allStats, phaseRecord, onProgress);
+              await this.runDeepEvidence(scan, queries, depth, allSignals, allStats, phaseRecord, onProgress, topic);
               break;
 
             case 'MARKET_MAPPING':
@@ -270,48 +289,68 @@ export class ScanOrchestrator {
     allStats: CollectorStat[],
     phaseRecord: PhaseRecord,
     _onProgress?: ProgressCallback,
+    topic?: string,
   ): Promise<void> {
-    // Run a quick analysis to find top candidates
-    const candidates = await executeFullAnalysis(allSignals);
-    const topJobs = candidates
-      .filter(c => !c.rejected)
-      .sort((a, b) => b.scores.final - a.scores.final)
-      .slice(0, 3)
-      .map(c => c.jobToBeDone);
+    // Thorough mode runs multiple iterative rounds
+    const isThorough = scan.mode === 'thorough';
+    const rounds = isThorough ? 3 : 1;
 
-    if (topJobs.length === 0) return;
+    for (let round = 0; round < rounds; round++) {
+      if (isThorough) {
+        console.log(`[DeepEvidence] Round ${round + 1}/${rounds}`);
+      }
 
-    // Generate refined queries
-    const deepQueries = topJobs.map(j => `${j} software problems`);
+      // Run analysis to find top candidates
+      const candidates = await executeFullAnalysis(allSignals);
+      const topCandidates = candidates
+        .filter(c => !c.rejected)
+        .sort((a, b) => b.scores.final - a.scores.final)
+        .slice(0, 3);
+      const topJobs = topCandidates.map(c => c.jobToBeDone);
 
-    // Dispatch collection for refined queries
-    const jobIds: string[] = [];
-    for (const collectorId of ALL_COLLECTOR_IDS) {
-      const jobType = COLLECTOR_JOB_MAP[collectorId];
-      const jobId = this.queue.enqueue(jobType, {
-        collectorId,
-        queries: deepQueries,
-        options: {
-          redditResultLimit: depth.redditResultLimit,
-          subredditDepth: depth.subredditDepth,
-          reviewSnippetLimit: depth.reviewSnippetLimit,
-          pricingQueryCount: depth.pricingQueryCount,
-          jobResultLimit: depth.jobResultLimit,
-        },
-      }, executeCollectJob);
-      jobIds.push(jobId);
-    }
+      if (topJobs.length === 0) return;
 
-    phaseRecord.jobIds = jobIds;
-    const results = await this.queue.executeParallel(jobIds);
+      // Generate refined queries — LLM-powered if topic provided
+      let deepQueries: string[];
+      if (topic && isThorough) {
+        deepQueries = await generateQueries(
+          topic,
+          Math.min(8, depth.queryCount),
+          topJobs.map(j => `${j} (score: ${topCandidates.find(c => c.jobToBeDone === j)?.scores.final.toFixed(1)})`),
+        );
+      } else {
+        deepQueries = topJobs.map(j => `${j} software problems`);
+      }
 
-    for (const result of results) {
-      await this.store.addJobResult(scan.id, result);
-      if (result.status === 'completed' && result.output) {
-        const output = result.output as CollectJobOutput;
-        allSignals.push(...output.signals);
-        allStats.push(output.stat);
-        phaseRecord.signalsAdded += output.signals.length;
+      // Dispatch collection for refined queries
+      const jobIds: string[] = [];
+      for (const collectorId of ALL_COLLECTOR_IDS) {
+        const jobType = COLLECTOR_JOB_MAP[collectorId];
+        const jobId = this.queue.enqueue(jobType, {
+          collectorId,
+          queries: deepQueries,
+          options: {
+            redditResultLimit: depth.redditResultLimit,
+            subredditDepth: depth.subredditDepth,
+            reviewSnippetLimit: depth.reviewSnippetLimit,
+            pricingQueryCount: depth.pricingQueryCount,
+            jobResultLimit: depth.jobResultLimit,
+          },
+        }, executeCollectJob);
+        jobIds.push(jobId);
+      }
+
+      phaseRecord.jobIds.push(...jobIds);
+      const results = await this.queue.executeParallel(jobIds);
+
+      for (const result of results) {
+        await this.store.addJobResult(scan.id, result);
+        if (result.status === 'completed' && result.output) {
+          const output = result.output as CollectJobOutput;
+          allSignals.push(...output.signals);
+          allStats.push(output.stat);
+          phaseRecord.signalsAdded += output.signals.length;
+        }
       }
     }
   }

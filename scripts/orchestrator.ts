@@ -1,9 +1,10 @@
 // SignalForge Orchestrator CLI
 //
 // Usage:
-//   npx tsx scripts/orchestrator.ts scan                  # standard scan
-//   npx tsx scripts/orchestrator.ts scan --mode deep      # deep scan
-//   npx tsx scripts/orchestrator.ts scan --mode quick     # quick scan
+//   npx tsx scripts/orchestrator.ts scan                                    # standard scan
+//   npx tsx scripts/orchestrator.ts scan --mode deep                       # deep scan
+//   npx tsx scripts/orchestrator.ts scan --mode quick                      # quick scan
+//   npx tsx scripts/orchestrator.ts scan --mode thorough --topic "construction"  # topic-focused deep scan
 //   npx tsx scripts/orchestrator.ts benchmark             # run benchmarks
 //   npx tsx scripts/orchestrator.ts benchmark --verbose   # with details
 //   npx tsx scripts/orchestrator.ts benchmark --e2e       # include end-to-end cases
@@ -53,12 +54,20 @@ function loadBaseline(): BaselineData | null {
 
 async function runScan() {
   const mode = (getFlag('--mode') ?? 'standard') as ScanMode;
-  if (!['quick', 'standard', 'deep'].includes(mode)) {
-    console.error(`Invalid mode: ${mode}. Use quick, standard, or deep.`);
+  if (!['quick', 'standard', 'deep', 'thorough'].includes(mode)) {
+    console.error(`Invalid mode: ${mode}. Use quick, standard, deep, or thorough.`);
     process.exit(1);
   }
 
-  console.log(`\n=== SignalForge Orchestrator — ${mode.toUpperCase()} scan ===\n`);
+  const topic = getFlag('--topic');
+
+  if (mode === 'thorough' && !topic) {
+    console.error('Thorough mode requires --topic. Example: --topic "construction"');
+    process.exit(1);
+  }
+
+  const topicLabel = topic ? ` — topic: "${topic}"` : '';
+  console.log(`\n=== SignalForge Orchestrator — ${mode.toUpperCase()} scan${topicLabel} ===\n`);
 
   const store = new FileScanStore();
   const queue = new JobQueue();
@@ -84,7 +93,7 @@ async function runScan() {
     console.log(
       `  [${elapsed}s] ${progress.phase} — ${progress.status} — ${progress.progressPercent}% — ${progress.signalCount} signals`
     );
-  });
+  }, topic);
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`\n=== Scan ${scan.status.toUpperCase()} in ${elapsed}s ===\n`);

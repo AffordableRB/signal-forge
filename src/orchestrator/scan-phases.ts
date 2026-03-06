@@ -16,13 +16,14 @@ export const SCAN_PHASES = [
 
 export type ScanPhase = (typeof SCAN_PHASES)[number];
 
-export type ScanMode = 'quick' | 'standard' | 'deep';
+export type ScanMode = 'quick' | 'standard' | 'deep' | 'thorough';
 
 // Which phases run for each scan mode
 export const PHASE_SEQUENCE: Record<ScanMode, ScanPhase[]> = {
   quick: ['DISCOVERY', 'FINAL_ANALYSIS', 'REPORTING'],
   standard: ['DISCOVERY', 'MARKET_MAPPING', 'FINAL_ANALYSIS', 'REPORTING'],
   deep: ['DISCOVERY', 'DEEP_EVIDENCE', 'MARKET_MAPPING', 'CROSS_VALIDATION', 'FINAL_ANALYSIS', 'REPORTING'],
+  thorough: ['DISCOVERY', 'DEEP_EVIDENCE', 'MARKET_MAPPING', 'CROSS_VALIDATION', 'FINAL_ANALYSIS', 'REPORTING'],
 };
 
 // Valid transitions from each phase

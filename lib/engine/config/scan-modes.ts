@@ -1,6 +1,6 @@
 // Scan mode configuration controlling depth and breadth of each pipeline phase.
 
-export type ScanMode = 'quick' | 'standard' | 'deep';
+export type ScanMode = 'quick' | 'standard' | 'deep' | 'thorough';
 
 export type ScanPhase =
   | 'discovery'
@@ -76,5 +76,18 @@ export const SCAN_MODES: Record<ScanMode, ScanModeConfig> = {
     phases: ['discovery', 'deep-evidence', 'market-mapping', 'cross-validation', 'analysis'],
     fastTimeoutMs: 12000,
     proxyTimeoutMs: 25000,
+  },
+  thorough: {
+    mode: 'thorough',
+    label: 'Thorough Scan',
+    queryCount: 12,
+    subredditDepth: 5,
+    reviewSnippetLimit: 20,
+    redditResultLimit: 50,
+    pricingQueryCount: 4,
+    jobResultLimit: 10,
+    phases: ['discovery', 'deep-evidence', 'market-mapping', 'cross-validation', 'analysis'],
+    fastTimeoutMs: 30000,
+    proxyTimeoutMs: 60000,
   },
 };
