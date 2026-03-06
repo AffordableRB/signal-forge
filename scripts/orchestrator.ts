@@ -299,6 +299,54 @@ async function runIntegration() {
   if (!result.passed) process.exit(1);
 }
 
+// ─── Benchmark history command ───────────────────────────────────────
+
+async function recordBenchmarkHistory() {
+  const allCases = [...BENCHMARK_CASES, ...E2E_BENCHMARK_CASES];
+  console.log('\n=== Recording Benchmark History ===\n');
+
+  const result = runBenchmarkSuite(allCases);
+  const historyPath = path.resolve(__dirname, '..', 'docs', 'benchmark-history.md');
+
+  // Build the history entry
+  const date = new Date().toISOString().split('T')[0];
+  const time = new Date().toISOString().split('T')[1].split('.')[0];
+  const lines: string[] = [
+    `## ${date} ${time}`,
+    '',
+    `| Case | Score | Ocean | Confidence | ROI | Status |`,
+    `|------|-------|-------|------------|-----|--------|`,
+  ];
+
+  for (const r of result.results) {
+    const status = r.passed ? 'PASS' : 'FAIL';
+    const e2e = r.detectorScores ? ' [E2E]' : '';
+    lines.push(`| ${r.name}${e2e} | ${r.score.toFixed(1)} | ${r.ocean} | ${r.confidence}% | ${r.roi.toFixed(1)}x | ${status} |`);
+  }
+
+  lines.push('');
+  lines.push(`**Summary:** ${result.passed}/${result.total} passed`);
+  lines.push('');
+
+  // Append to history file
+  let history = '';
+  try {
+    history = fs.readFileSync(historyPath, 'utf-8');
+  } catch {
+    history = '# Benchmark History\n\n<!-- BENCHMARK_HISTORY_START -->\n<!-- BENCHMARK_HISTORY_END -->\n';
+  }
+
+  const marker = '<!-- BENCHMARK_HISTORY_START -->';
+  const entry = lines.join('\n');
+  history = history.replace(marker, marker + '\n' + entry);
+
+  fs.writeFileSync(historyPath, history, 'utf-8');
+
+  console.log(`Appended ${result.total} results to docs/benchmark-history.md`);
+  console.log(`${result.passed} passed, ${result.failed} failed`);
+  console.log('');
+}
+
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -318,6 +366,7 @@ Commands:
   benchmark:baseline       Save current results as new baseline
   collector:health         Run collector structure health checks
   integration              Run integration test (quick scan + validation)
+  benchmark:history        Record benchmark results to docs/benchmark-history.md
 
 Examples:
   npx tsx scripts/orchestrator.ts scan
@@ -348,6 +397,9 @@ Examples:
       break;
     case 'integration':
       await runIntegration();
+      break;
+    case 'benchmark:history':
+      await recordBenchmarkHistory();
       break;
     default:
       console.error(`Unknown command: ${command}. Run with --help for usage.`);
