@@ -22,6 +22,7 @@ import { synthesizeStartupConcepts, generateValidationPlan } from './synthesis/s
 import { computeConfidence } from './confidence/confidence-scorer';
 import { generateScoringOutput } from './confidence/scoring-output';
 import { deduplicateEvidence } from './collectors/dedup';
+import { deepValidateTop } from './validation/deep-validator';
 
 export interface PhaseProgress {
   phase: ScanPhase;
@@ -259,12 +260,18 @@ export async function runPipeline(
 
   // Rank
   const ranked = rankCandidates(filtered);
-  const accepted = ranked.filter(c => !c.rejected);
+
+  // Deep validation on top 2 (only if LLM available and we have time)
+  const validated = (isLLMAvailable() && hasTime())
+    ? await deepValidateTop(ranked, 2)
+    : ranked;
+
+  const accepted = validated.filter(c => !c.rejected);
 
   emitPhase('analysis', 'completed', Date.now() - analysisStart, 0);
 
   return {
-    candidates: ranked,
+    candidates: validated,
     topScore: accepted[0]?.scores.final ?? 0,
     topOpportunity: accepted[0]?.jobToBeDone ?? 'N/A',
     candidateCount: ranked.length,

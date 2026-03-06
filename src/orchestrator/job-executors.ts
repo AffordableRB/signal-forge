@@ -22,6 +22,7 @@ import { generateWedges } from '../../lib/engine/wedge/wedge-generator';
 import { synthesizeStartupConcepts, generateValidationPlan } from '../../lib/engine/synthesis/synthesizer';
 import { computeConfidence } from '../../lib/engine/confidence/confidence-scorer';
 import { generateScoringOutput } from '../../lib/engine/confidence/scoring-output';
+import { deepValidateTop } from '../../lib/engine/validation/deep-validator';
 import {
   CollectJobInput, CollectJobOutput,
   ClusterJobInput, ClusterJobOutput,
@@ -140,5 +141,8 @@ export async function executeFullAnalysis(signals: RawSignal[]): Promise<Opportu
   const filtered = applyKillSwitch(applyFilters(withConfidence));
 
   // Rank
-  return rankCandidates(filtered);
+  const ranked = rankCandidates(filtered);
+
+  // Deep validation on top 2
+  return deepValidateTop(ranked, 2);
 }

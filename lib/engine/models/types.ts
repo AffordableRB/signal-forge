@@ -172,6 +172,66 @@ export interface OpportunityCandidate {
   // Confidence & objectivity layer
   confidence?: ConfidenceBreakdown;
   scoringOutput?: ScoringOutput;
+  // Deep validation (only on top opportunities)
+  deepValidation?: DeepValidation;
+}
+
+// ─── Deep Validation Types ──────────────────────────────────────────
+
+export type ValidationVerdict = 'GO' | 'CONDITIONAL' | 'NO-GO';
+
+export interface ValidationCheck {
+  name: string;
+  passed: boolean;
+  evidence: string;
+  confidence: number; // 0-100
+}
+
+export interface UnitEconomics {
+  estimatedCAC: string;
+  estimatedLTV: string;
+  estimatedMargin: string;
+  monthlyRevenueAt100Customers: string;
+  breakEvenCustomers: number;
+  reasoning: string;
+}
+
+export interface CompetitorDeepDive {
+  name: string;
+  estimatedRevenue: string;
+  mainWeakness: string;
+  whyYouWin: string;
+  switchingCost: string;
+}
+
+export interface First10Customers {
+  segment: string;
+  howToReach: string;
+  estimatedConversionRate: string;
+  exampleOutreach: string;
+}
+
+export interface ValidationTest {
+  testType: string;
+  description: string;
+  successCriteria: string;
+  timeRequired: string;
+  costRequired: string;
+}
+
+export interface DeepValidation {
+  verdict: ValidationVerdict;
+  verdictReasoning: string;
+  confidencePercent: number; // 0-100 how confident in the verdict
+  checks: ValidationCheck[];
+  unitEconomics: UnitEconomics;
+  competitorDeepDive: CompetitorDeepDive[];
+  first10Customers: First10Customers;
+  exactGap: string; // the specific gap in existing solutions
+  unfairAdvantage: string; // what would make YOU specifically able to win
+  biggestRisk: string;
+  validationTests: ValidationTest[];
+  killReasons: string[]; // reasons this could fail even with good signals
 }
 
 export interface PipelineContext {

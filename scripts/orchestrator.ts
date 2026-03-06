@@ -120,7 +120,20 @@ async function runScan() {
   }
 
   // Show candidate details
-  const scanWithCandidates = scan as typeof scan & { candidates?: Array<{ jobToBeDone: string; scores: { final: number }; rejected: boolean; confidence?: { overall: number }; marketStructure?: { type: string } }> };
+  const scanWithCandidates = scan as typeof scan & { candidates?: Array<{
+    jobToBeDone: string; scores: { final: number }; rejected: boolean;
+    confidence?: { overall: number }; marketStructure?: { type: string };
+    deepValidation?: {
+      verdict: string; verdictReasoning: string; confidencePercent: number;
+      checks: Array<{ name: string; passed: boolean; evidence: string; confidence: number }>;
+      unitEconomics: { estimatedCAC: string; estimatedLTV: string; estimatedMargin: string; monthlyRevenueAt100Customers: string; breakEvenCustomers: number; reasoning: string };
+      competitorDeepDive: Array<{ name: string; mainWeakness: string; whyYouWin: string }>;
+      first10Customers: { segment: string; howToReach: string; estimatedConversionRate: string; exampleOutreach: string };
+      exactGap: string; unfairAdvantage: string; biggestRisk: string;
+      validationTests: Array<{ testType: string; description: string; successCriteria: string; timeRequired: string; costRequired: string }>;
+      killReasons: string[];
+    };
+  }> };
   if (scanWithCandidates.candidates) {
     console.log(`\nOpportunities:`);
     for (const c of scanWithCandidates.candidates) {
@@ -128,6 +141,70 @@ async function runScan() {
       const market = c.marketStructure?.type ?? '-';
       const status = c.rejected ? ' [rejected]' : '';
       console.log(`  ${c.scores.final.toFixed(1).padStart(5)}  ${market.padEnd(8)} ${conf.padStart(5)} conf  ${c.jobToBeDone}${status}`);
+
+      // Deep validation details
+      if (c.deepValidation) {
+        const dv = c.deepValidation;
+        const verdictColor = dv.verdict === 'GO' ? 'GO' : dv.verdict === 'NO-GO' ? 'NO-GO' : 'CONDITIONAL';
+        console.log(`\n         --- DEEP VALIDATION: ${verdictColor} (${dv.confidencePercent}% confidence) ---`);
+        console.log(`         ${dv.verdictReasoning}`);
+
+        // Checks
+        const passed = dv.checks.filter(ch => ch.passed).length;
+        const total = dv.checks.length;
+        console.log(`\n         Checks: ${passed}/${total} passed`);
+        for (const ch of dv.checks) {
+          const icon = ch.passed ? '[PASS]' : '[FAIL]';
+          console.log(`           ${icon} ${ch.name} (${ch.confidence}%)`);
+          console.log(`                 ${ch.evidence.substring(0, 120)}`);
+        }
+
+        // Unit economics
+        const ue = dv.unitEconomics;
+        console.log(`\n         Unit Economics:`);
+        console.log(`           CAC: ${ue.estimatedCAC}  |  LTV: ${ue.estimatedLTV}  |  Margin: ${ue.estimatedMargin}`);
+        console.log(`           Revenue @100 customers: ${ue.monthlyRevenueAt100Customers}/mo  |  Break-even: ${ue.breakEvenCustomers} customers`);
+        console.log(`           ${ue.reasoning}`);
+
+        // Gap & risk
+        console.log(`\n         Exact Gap: ${dv.exactGap}`);
+        console.log(`         Biggest Risk: ${dv.biggestRisk}`);
+
+        // First 10 customers
+        const f10 = dv.first10Customers;
+        console.log(`\n         First 10 Customers:`);
+        console.log(`           Segment: ${f10.segment}`);
+        console.log(`           Reach: ${f10.howToReach}`);
+        console.log(`           Conv. rate: ${f10.estimatedConversionRate}`);
+        console.log(`           Outreach: "${f10.exampleOutreach}"`);
+
+        // Competitors
+        if (dv.competitorDeepDive.length > 0) {
+          console.log(`\n         Competitor Analysis:`);
+          for (const comp of dv.competitorDeepDive) {
+            console.log(`           ${comp.name}: weakness="${comp.mainWeakness}" | you win="${comp.whyYouWin}"`);
+          }
+        }
+
+        // Validation tests
+        if (dv.validationTests.length > 0) {
+          console.log(`\n         Validation Tests:`);
+          for (const vt of dv.validationTests) {
+            console.log(`           [${vt.testType}] ${vt.description} (${vt.timeRequired}, ${vt.costRequired})`);
+            console.log(`             Success: ${vt.successCriteria}`);
+          }
+        }
+
+        // Kill reasons
+        if (dv.killReasons.length > 0) {
+          console.log(`\n         Kill Reasons:`);
+          for (const kr of dv.killReasons) {
+            console.log(`           - ${kr}`);
+          }
+        }
+
+        console.log(`         ---`);
+      }
     }
   }
 
