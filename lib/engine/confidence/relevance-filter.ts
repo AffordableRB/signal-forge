@@ -20,10 +20,16 @@ export function assessRelevance(
 
   // Job relevance: do keywords from the job appear in evidence?
   const jobTokens = tokenize(jobToBeDone);
+  const jobPhrases = extractPhrases(jobToBeDone);
   const jobHits = jobTokens.filter(t => text.includes(t));
+  const jobPhraseHits = jobPhrases.filter(p => text.includes(p));
   const jobRelevance = jobTokens.length > 0 ? jobHits.length / jobTokens.length : 0;
-  if (jobRelevance >= 0.5) {
+  // Phrase matches are stronger signals than individual token matches
+  if (jobPhraseHits.length > 0) {
     score += 0.4;
+    reasons.push(`Job phrase match: ${jobPhraseHits.join(', ')}`);
+  } else if (jobRelevance >= 0.3) {
+    score += 0.35;
     reasons.push(`Job match: ${jobHits.length}/${jobTokens.length} keywords`);
   } else if (jobRelevance > 0) {
     score += 0.15;
@@ -32,18 +38,22 @@ export function assessRelevance(
 
   // Buyer relevance
   const buyerTokens = tokenize(targetBuyer);
+  const buyerPhrases = extractPhrases(targetBuyer);
   const buyerHits = buyerTokens.filter(t => text.includes(t));
-  if (buyerHits.length > 0) {
-    score += 0.2;
-    reasons.push(`Buyer match: ${buyerHits.join(', ')}`);
+  const buyerPhraseHits = buyerPhrases.filter(p => text.includes(p));
+  if (buyerPhraseHits.length > 0 || buyerHits.length > 0) {
+    score += buyerPhraseHits.length > 0 ? 0.25 : 0.2;
+    reasons.push(`Buyer match: ${(buyerPhraseHits.length > 0 ? buyerPhraseHits : buyerHits).join(', ')}`);
   }
 
   // Industry/vertical relevance
   const vertTokens = tokenize(vertical);
+  const vertPhrases = extractPhrases(vertical);
   const vertHits = vertTokens.filter(t => text.includes(t));
-  if (vertHits.length > 0) {
-    score += 0.2;
-    reasons.push(`Vertical match: ${vertHits.join(', ')}`);
+  const vertPhraseHits = vertPhrases.filter(p => text.includes(p));
+  if (vertPhraseHits.length > 0 || vertHits.length > 0) {
+    score += vertPhraseHits.length > 0 ? 0.25 : 0.2;
+    reasons.push(`Vertical match: ${(vertPhraseHits.length > 0 ? vertPhraseHits : vertHits).join(', ')}`);
   }
 
   // Actionability: does the evidence contain actionable signals?
@@ -93,7 +103,20 @@ export function filterByRelevance(
 function tokenize(text: string): string[] {
   const stopWords = new Set(['a', 'an', 'the', 'for', 'and', 'or', 'to', 'of', 'in', 'with', 'is', 'are', 'was', 'be', 'by', 'on', 'at', 'it', 'that', 'this', 'as']);
   return text.toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
     .split(/\s+/)
-    .filter(w => w.length > 2 && !stopWords.has(w));
+    .filter(w => w.length > 1 && !stopWords.has(w));
+}
+
+// Extract meaningful bigram phrases from text
+function extractPhrases(text: string): string[] {
+  const words = text.toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 1);
+  const phrases: string[] = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    phrases.push(`${words[i]} ${words[i + 1]}`);
+  }
+  return phrases;
 }
