@@ -97,7 +97,7 @@ export class RedditCollector implements Collector {
     }
 
     // Also search specific subreddits for higher relevance
-    const topSubs = TARGET_SUBREDDITS.slice(0, 4);
+    const topSubs = TARGET_SUBREDDITS.slice(0, 2);
     for (const sub of topSubs) {
       try {
         const subUrl = `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&limit=10&sort=relevance&t=year`;

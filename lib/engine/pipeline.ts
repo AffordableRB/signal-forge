@@ -10,6 +10,9 @@ import { applyFilters } from './filters';
 import { applyKillSwitch } from './reality/kill-switch';
 import { SEED_QUERIES } from './config/seed-queries';
 
+// Use fewer queries in serverless to stay within timeout limits
+const WEB_QUERY_LIMIT = 4;
+
 export interface PipelineResult {
   candidates: OpportunityCandidate[];
   topScore: number;
@@ -18,8 +21,9 @@ export interface PipelineResult {
 }
 
 export async function runPipeline(): Promise<PipelineResult> {
-  // 1. Collect
-  const signals = await collectAllSignals(SEED_QUERIES);
+  // 1. Collect (limit queries for serverless timeout)
+  const queries = SEED_QUERIES.slice(0, WEB_QUERY_LIMIT);
+  const signals = await collectAllSignals(queries);
 
   // 2. Cluster
   const candidates = clusterSignals(signals);
