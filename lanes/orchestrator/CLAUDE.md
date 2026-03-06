@@ -61,11 +61,12 @@ Priority order:
 Before committing:
 ```bash
 npm run build
-npm run orch:benchmark
+npm run orch:benchmark:e2e
+npm run orch:benchmark:check
 npm run orch:scan:quick
 ```
 
-All three must pass. If benchmarks fail, you broke something — revert and investigate.
+All must pass. If benchmarks fail, you broke something — revert and investigate.
 
 ## What NOT To Do
 

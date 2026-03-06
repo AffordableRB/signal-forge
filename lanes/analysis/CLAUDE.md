@@ -68,11 +68,12 @@ Priority order:
 Before committing:
 ```bash
 npm run build
-npm run orch:benchmark
+npm run orch:benchmark:e2e
+npm run orch:benchmark:check
 npm run orch:scan:quick
 ```
 
-All three must pass. Your changes directly affect scores and classifications. Monitor:
+All must pass. Your changes directly affect scores and classifications. Monitor:
 - Score ranges per benchmark case
 - Ocean classifications (red/blue/purple)
 - Confidence percentages

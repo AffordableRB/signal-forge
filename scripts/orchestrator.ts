@@ -6,16 +6,27 @@
 //   npx tsx scripts/orchestrator.ts scan --mode quick     # quick scan
 //   npx tsx scripts/orchestrator.ts benchmark             # run benchmarks
 //   npx tsx scripts/orchestrator.ts benchmark --verbose   # with details
+//   npx tsx scripts/orchestrator.ts benchmark --e2e       # include end-to-end cases
+//   npx tsx scripts/orchestrator.ts benchmark:check       # check for regressions
+//   npx tsx scripts/orchestrator.ts benchmark:baseline    # save new baseline
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { ScanOrchestrator } from '../src/orchestrator';
 import { InMemoryScanStore } from '../src/state/scan-store';
 import { JobQueue } from '../src/queue/job-queue';
-import { runBenchmarkSuite } from '../benchmarks/benchmark-runner';
-import { BENCHMARK_CASES } from '../benchmarks/cases';
+import {
+  runBenchmarkSuite,
+  compareToBaseline,
+  createBaseline,
+} from '../benchmarks/benchmark-runner';
+import type { BaselineData } from '../benchmarks/benchmark-runner';
+import { BENCHMARK_CASES, E2E_BENCHMARK_CASES } from '../benchmarks/cases';
 import type { ScanMode } from '../src/orchestrator/scan-phases';
 
 const args = process.argv.slice(2);
 const command = args[0];
+const BASELINE_PATH = path.resolve(__dirname, '..', 'benchmarks', 'baseline.json');
 
 function getFlag(name: string): string | undefined {
   const idx = args.indexOf(name);
@@ -25,6 +36,15 @@ function getFlag(name: string): string | undefined {
 
 function hasFlag(name: string): boolean {
   return args.includes(name);
+}
+
+function loadBaseline(): BaselineData | null {
+  try {
+    const raw = fs.readFileSync(BASELINE_PATH, 'utf-8');
+    return JSON.parse(raw) as BaselineData;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Scan command ───────────────────────────────────────────────────
@@ -105,18 +125,31 @@ async function runScan() {
 
 async function runBenchmarks() {
   const verbose = hasFlag('--verbose');
+  const includeE2E = hasFlag('--e2e');
 
-  console.log('\n=== SignalForge Benchmark Suite ===\n');
+  const cases = includeE2E
+    ? [...BENCHMARK_CASES, ...E2E_BENCHMARK_CASES]
+    : BENCHMARK_CASES;
 
-  const result = runBenchmarkSuite(BENCHMARK_CASES);
+  const label = includeE2E ? 'Benchmark Suite (with E2E)' : 'Benchmark Suite';
+  console.log(`\n=== SignalForge ${label} ===\n`);
+
+  const result = runBenchmarkSuite(cases);
 
   for (const r of result.results) {
     const icon = r.passed ? 'PASS' : 'FAIL';
-    console.log(`  ${icon}  ${r.name}`);
+    const e2eTag = r.detectorScores ? ' [E2E]' : '';
+    console.log(`  ${icon}  ${r.name}${e2eTag}`);
     console.log(`       Score: ${r.score.toFixed(1)} | Ocean: ${r.ocean} | Confidence: ${r.confidence}% | ROI: ${r.roi}x | Contradictions: ${r.contradictions}`);
     if (!r.passed) {
       for (const f of r.failures) {
         console.log(`       FAIL: ${f}`);
+      }
+    }
+    if (verbose && r.detectorScores) {
+      console.log('       Detector scores:');
+      for (const [id, score] of Object.entries(r.detectorScores)) {
+        console.log(`         ${id.padEnd(22)} ${score}`);
       }
     }
     if (verbose) {
@@ -127,6 +160,108 @@ async function runBenchmarks() {
   console.log(`\n=== ${result.passed} passed, ${result.failed} failed out of ${result.total} ===\n`);
 
   if (result.failed > 0) process.exit(1);
+}
+
+// ─── Regression check command ───────────────────────────────────────
+
+async function runRegressionCheck() {
+  const baseline = loadBaseline();
+  if (!baseline) {
+    console.error('No baseline found at benchmarks/baseline.json');
+    console.error('Run: npx tsx scripts/orchestrator.ts benchmark:baseline');
+    process.exit(1);
+  }
+
+  // Run both fixture and E2E cases for regression checking
+  const allCases = [...BENCHMARK_CASES, ...E2E_BENCHMARK_CASES];
+  console.log(`\n=== SignalForge Regression Check ===\n`);
+  console.log(`Baseline from: ${baseline.createdAt}`);
+  console.log(`Cases: ${allCases.length} (${baseline.entries.length} in baseline)\n`);
+
+  const result = runBenchmarkSuite(allCases);
+
+  // First check if all benchmarks pass
+  const failures = result.results.filter(r => !r.passed);
+  if (failures.length > 0) {
+    console.log('BENCHMARK FAILURES:');
+    for (const f of failures) {
+      console.log(`  FAIL  ${f.name}`);
+      for (const msg of f.failures) {
+        console.log(`        ${msg}`);
+      }
+    }
+    console.log('');
+  }
+
+  // Then check for drift
+  const regressions = compareToBaseline(result, baseline);
+
+  if (regressions.length === 0 && failures.length === 0) {
+    console.log('All benchmarks pass. No regressions detected.\n');
+    return;
+  }
+
+  if (regressions.length > 0) {
+    const warnings = regressions.filter(r => r.severity === 'warning');
+    const hard = regressions.filter(r => r.severity === 'regression');
+
+    if (warnings.length > 0) {
+      console.log(`WARNINGS (${warnings.length} score drifts detected):`);
+      for (const w of warnings) {
+        const drift = w.driftPercent ? ` (${w.driftPercent}% drift)` : '';
+        console.log(`  ${w.caseId}.${w.field}: ${w.baseline} -> ${w.current}${drift}`);
+      }
+      console.log('');
+    }
+
+    if (hard.length > 0) {
+      console.log(`REGRESSIONS (${hard.length} breaking changes):`);
+      for (const r of hard) {
+        const drift = r.driftPercent ? ` (${r.driftPercent}% drift)` : '';
+        console.log(`  ${r.caseId}.${r.field}: ${r.baseline} -> ${r.current}${drift}`);
+      }
+      console.log('');
+    }
+
+    if (hard.length > 0 || failures.length > 0) {
+      console.log(`=== FAILED: ${failures.length} benchmark failures, ${hard.length} regressions ===\n`);
+      process.exit(1);
+    } else {
+      console.log(`=== PASSED with ${warnings.length} warnings ===\n`);
+    }
+  } else if (failures.length > 0) {
+    console.log(`=== FAILED: ${failures.length} benchmark failures ===\n`);
+    process.exit(1);
+  }
+}
+
+// ─── Baseline save command ──────────────────────────────────────────
+
+async function saveBaseline() {
+  const allCases = [...BENCHMARK_CASES, ...E2E_BENCHMARK_CASES];
+  console.log(`\n=== Generating Baseline ===\n`);
+
+  const result = runBenchmarkSuite(allCases);
+
+  // Verify all pass first
+  const failures = result.results.filter(r => !r.passed);
+  if (failures.length > 0) {
+    console.error('Cannot save baseline — benchmarks are failing:');
+    for (const f of failures) {
+      console.error(`  FAIL  ${f.name}`);
+      for (const msg of f.failures) {
+        console.error(`        ${msg}`);
+      }
+    }
+    process.exit(1);
+  }
+
+  const baseline = createBaseline(result);
+  fs.writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2) + '\n', 'utf-8');
+
+  console.log(`Saved baseline with ${baseline.entries.length} cases to benchmarks/baseline.json`);
+  console.log(`Score range: ${Math.min(...result.results.map(r => r.score)).toFixed(1)} - ${Math.max(...result.results.map(r => r.score)).toFixed(1)}`);
+  console.log('');
 }
 
 // ─── Main ───────────────────────────────────────────────────────────
@@ -142,11 +277,18 @@ Commands:
 
   benchmark                Run benchmark validation suite
     --verbose              Show detailed output
+    --e2e                  Include end-to-end detector tests
+
+  benchmark:check          Check for regressions against baseline
+  benchmark:baseline       Save current results as new baseline
 
 Examples:
   npx tsx scripts/orchestrator.ts scan
   npx tsx scripts/orchestrator.ts scan --mode deep
   npx tsx scripts/orchestrator.ts benchmark
+  npx tsx scripts/orchestrator.ts benchmark --e2e
+  npx tsx scripts/orchestrator.ts benchmark:check
+  npx tsx scripts/orchestrator.ts benchmark:baseline
 `);
     return;
   }
@@ -157,6 +299,12 @@ Examples:
       break;
     case 'benchmark':
       await runBenchmarks();
+      break;
+    case 'benchmark:check':
+      await runRegressionCheck();
+      break;
+    case 'benchmark:baseline':
+      await saveBaseline();
       break;
     default:
       console.error(`Unknown command: ${command}. Run with --help for usage.`);

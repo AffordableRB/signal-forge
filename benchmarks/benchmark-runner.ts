@@ -7,6 +7,8 @@ import { computeConfidence } from '../lib/engine/confidence/confidence-scorer';
 import { classifyMarketStructureV2 } from '../lib/engine/market/market-structure-v2';
 import { estimateEconomicImpactV2 } from '../lib/engine/detectors/economic-impact-v2';
 import { detectContradictions } from '../lib/engine/confidence/contradiction-detector';
+import { analyzeCandidate } from '../lib/engine/detectors/index';
+import { scoreCandidate } from '../lib/engine/scoring/index';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -34,6 +36,7 @@ export interface BenchmarkResult {
   contradictions: number;
   roi: number;
   failures: string[];
+  detectorScores?: Record<string, number>;
 }
 
 export interface BenchmarkSuiteResult {
@@ -50,23 +53,28 @@ export function makeCandidate(overrides: Partial<OpportunityCandidate> & {
   detectorScores?: Record<string, number>;
 }): OpportunityCandidate {
   const detectorScores = overrides.detectorScores ?? {};
+  const hasDetectorScores = Object.keys(detectorScores).length > 0;
   const detectorIds = [
     'demand', 'painIntensity', 'abilityToPay', 'competitionWeakness',
     'easeToBuild', 'distributionAccess', 'workflowAnchor',
     'marketTiming', 'revenueDensity', 'switchingFriction', 'aiAdvantage', 'marketExpansion',
   ];
 
-  const detectorResults: DetectorResult[] = detectorIds.map(id => ({
-    detectorId: id,
-    score: detectorScores[id] ?? 5,
-    explanation: `Test score for ${id}`,
-  }));
+  const detectorResults: DetectorResult[] = hasDetectorScores
+    ? detectorIds.map(id => ({
+        detectorId: id,
+        score: detectorScores[id] ?? 5,
+        explanation: `Test score for ${id}`,
+      }))
+    : []; // Empty — detectors will be run in E2E mode
 
   const scores = { final: 0, breakdown: {} as Record<string, number> };
-  for (const dr of detectorResults) {
-    scores.breakdown[dr.detectorId] = dr.score;
+  if (hasDetectorScores) {
+    for (const dr of detectorResults) {
+      scores.breakdown[dr.detectorId] = dr.score;
+    }
+    scores.final = detectorResults.reduce((s, r) => s + r.score, 0) / detectorResults.length;
   }
-  scores.final = detectorResults.reduce((s, r) => s + r.score, 0) / detectorResults.length;
 
   return {
     id: 'bench-' + Math.random().toString(36).slice(2, 8),
@@ -100,7 +108,14 @@ export function makeEvidence(count: number, opts: Partial<Evidence> = {}): Evide
 // ─── Runner ─────────────────────────────────────────────────────────
 
 export function runBenchmark(benchCase: BenchmarkCase): BenchmarkResult {
-  const c = benchCase.candidate;
+  let c = benchCase.candidate;
+
+  // E2E mode: if no detector results, run the full detector + scoring pipeline
+  const isE2E = c.detectorResults.length === 0;
+  if (isE2E) {
+    c = analyzeCandidate(c);
+    c = scoreCandidate(c);
+  }
 
   const ms = classifyMarketStructureV2(c);
   const eco = estimateEconomicImpactV2(c);
@@ -127,7 +142,8 @@ export function runBenchmark(benchCase: BenchmarkCase): BenchmarkResult {
   const confidence = computeConfidence(withAnalysis);
   const contradictions = detectContradictions(withAnalysis);
 
-  const score = c.scores.final;
+  // For E2E cases, use the weighted score; for fixture cases, use the simple average
+  const score = isE2E ? c.scores.final : c.scores.final;
   const failures: string[] = [];
 
   if (benchCase.expect.minScore != null && score < benchCase.expect.minScore) {
@@ -149,6 +165,12 @@ export function runBenchmark(benchCase: BenchmarkCase): BenchmarkResult {
     failures.push(`ROI ${eco.impliedROIMultiple} < min ${benchCase.expect.minROI}`);
   }
 
+  // Capture detector scores for baseline comparison
+  const detectorScoreMap: Record<string, number> = {};
+  for (const dr of c.detectorResults) {
+    detectorScoreMap[dr.detectorId] = dr.score;
+  }
+
   return {
     caseId: benchCase.id,
     name: benchCase.name,
@@ -159,6 +181,7 @@ export function runBenchmark(benchCase: BenchmarkCase): BenchmarkResult {
     contradictions: contradictions.contradictionScore,
     roi: eco.impliedROIMultiple,
     failures,
+    detectorScores: isE2E ? detectorScoreMap : undefined,
   };
 }
 
@@ -170,5 +193,141 @@ export function runBenchmarkSuite(cases: BenchmarkCase[]): BenchmarkSuiteResult 
     total: results.length,
     results,
     runAt: new Date().toISOString(),
+  };
+}
+
+// ─── Regression detection ───────────────────────────────────────────
+
+export interface BaselineEntry {
+  caseId: string;
+  score: number;
+  ocean: string;
+  confidence: number;
+  contradictions: number;
+  roi: number;
+  detectorScores?: Record<string, number>;
+}
+
+export interface BaselineData {
+  version: number;
+  createdAt: string;
+  entries: BaselineEntry[];
+}
+
+export interface RegressionResult {
+  caseId: string;
+  field: string;
+  baseline: number | string;
+  current: number | string;
+  driftPercent?: number;
+  severity: 'warning' | 'regression';
+}
+
+const DRIFT_THRESHOLD = 0.10; // 10% drift triggers regression
+const DETECTOR_DRIFT_THRESHOLD = 0.15; // 15% for individual detectors
+
+export function compareToBaseline(
+  suiteResult: BenchmarkSuiteResult,
+  baseline: BaselineData,
+): RegressionResult[] {
+  const regressions: RegressionResult[] = [];
+
+  for (const result of suiteResult.results) {
+    const baseEntry = baseline.entries.find(e => e.caseId === result.caseId);
+    if (!baseEntry) continue; // New case, no baseline to compare
+
+    // Score drift
+    if (baseEntry.score > 0) {
+      const scoreDrift = Math.abs(result.score - baseEntry.score) / baseEntry.score;
+      if (scoreDrift > DRIFT_THRESHOLD) {
+        regressions.push({
+          caseId: result.caseId,
+          field: 'score',
+          baseline: baseEntry.score,
+          current: result.score,
+          driftPercent: Math.round(scoreDrift * 100),
+          severity: scoreDrift > DRIFT_THRESHOLD * 2 ? 'regression' : 'warning',
+        });
+      }
+    }
+
+    // Ocean classification change
+    if (result.ocean !== baseEntry.ocean) {
+      regressions.push({
+        caseId: result.caseId,
+        field: 'ocean',
+        baseline: baseEntry.ocean,
+        current: result.ocean,
+        severity: 'regression',
+      });
+    }
+
+    // Confidence drift
+    if (baseEntry.confidence > 0) {
+      const confDrift = Math.abs(result.confidence - baseEntry.confidence) / baseEntry.confidence;
+      if (confDrift > DRIFT_THRESHOLD) {
+        regressions.push({
+          caseId: result.caseId,
+          field: 'confidence',
+          baseline: baseEntry.confidence,
+          current: result.confidence,
+          driftPercent: Math.round(confDrift * 100),
+          severity: confDrift > DRIFT_THRESHOLD * 2 ? 'regression' : 'warning',
+        });
+      }
+    }
+
+    // Contradiction score drift
+    if (baseEntry.contradictions > 0) {
+      const contrDrift = Math.abs(result.contradictions - baseEntry.contradictions) / baseEntry.contradictions;
+      if (contrDrift > DRIFT_THRESHOLD) {
+        regressions.push({
+          caseId: result.caseId,
+          field: 'contradictions',
+          baseline: baseEntry.contradictions,
+          current: result.contradictions,
+          driftPercent: Math.round(contrDrift * 100),
+          severity: 'warning',
+        });
+      }
+    }
+
+    // Per-detector score drift (E2E cases only)
+    if (result.detectorScores && baseEntry.detectorScores) {
+      for (const [detId, baseScore] of Object.entries(baseEntry.detectorScores)) {
+        const currentScore = result.detectorScores[detId];
+        if (currentScore != null && baseScore > 0) {
+          const detDrift = Math.abs(currentScore - baseScore) / baseScore;
+          if (detDrift > DETECTOR_DRIFT_THRESHOLD) {
+            regressions.push({
+              caseId: result.caseId,
+              field: `detector.${detId}`,
+              baseline: baseScore,
+              current: currentScore,
+              driftPercent: Math.round(detDrift * 100),
+              severity: detDrift > DETECTOR_DRIFT_THRESHOLD * 2 ? 'regression' : 'warning',
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return regressions;
+}
+
+export function createBaseline(suiteResult: BenchmarkSuiteResult): BaselineData {
+  return {
+    version: 1,
+    createdAt: suiteResult.runAt,
+    entries: suiteResult.results.map(r => ({
+      caseId: r.caseId,
+      score: r.score,
+      ocean: r.ocean,
+      confidence: r.confidence,
+      contradictions: r.contradictions,
+      roi: r.roi,
+      detectorScores: r.detectorScores,
+    })),
   };
 }

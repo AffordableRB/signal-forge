@@ -35,35 +35,48 @@ Exception: you may modify ANY file to resolve merge conflicts between lanes.
 ## Current State
 
 The benchmark system has:
-- **5 calibration cases** in `benchmarks/cases.ts`:
-  1. Missed call recovery (HOME-SERVICES, HIGH) — expects score ≥6.5, purple, conf ≥40
-  2. Legal intake (LEGAL, HIGH) — expects score ≥6, purple, conf ≥35
-  3. AI resume generator (GENERAL, LOW) — expects score ≤4, red, contradictions ≤30
-  4. Review response automation (HOME-SERVICES, MED-HIGH) — expects score ≥5, purple, conf ≥30
-  5. HVAC dispatch (HOME-SERVICES, MED-HIGH) — expects score ≥5.5, purple, conf ≥30
+- **12 calibration cases** in `benchmarks/cases.ts` (BENCHMARK_CASES):
+  1. Missed call recovery (HOME-SERVICES, HIGH) — score ≥6.5, purple, conf ≥40
+  2. Legal intake (LEGAL, HIGH) — score ≥6, purple, conf ≥35
+  3. AI resume generator (GENERAL, LOW) — score ≤4, red
+  4. Review response automation (HOME-SERVICES, MED-HIGH) — score ≥5, purple, conf ≥30
+  5. HVAC dispatch (HOME-SERVICES, MED-HIGH) — score ≥5.5, purple, conf ≥30
+  6. AI safety audit manufacturing (BLUE OCEAN) — score ≥6.5, blue, conf ≥30
+  7. Commodity CRM (LOW) — score ≤4, red
+  8. Social media scheduler creators (MEDIUM-LOW) — score ≤5, purple
+  9. Rural vet AI diagnostics (MEDIUM) — score 4.5-6.5, blue
+  10. Freelance lab tech marketplace (MEDIUM) — score 4.5-6, purple
+  11. Print shop management (LOW) — score ≤4.5, purple (declining market)
+  12. AI permit expediting (HIGH) — score ≥6.5, blue
 
-- **Runner** in `benchmarks/benchmark-runner.ts`: `runBenchmark()` and `runBenchmarkSuite()`
-- **CLI** via `npm run orch:benchmark`
+- **3 E2E detector test cases** (E2E_BENCHMARK_CASES):
+  1. Strong opportunity — runs detectors from raw evidence, expects score ≥5
+  2. Weak opportunity — thin evidence, expects score ≤4.5
+  3. Contradiction case — high demand but no money, expects contradiction flag
+
+- **Runner** in `benchmarks/benchmark-runner.ts`: `runBenchmark()`, `runBenchmarkSuite()`, `compareToBaseline()`, `createBaseline()`
+- **Regression baseline** in `benchmarks/baseline.json` — stores all scores, classifications, and detector outputs
+- **CLI commands**:
+  - `npm run orch:benchmark` — run 12 calibration cases
+  - `npm run orch:benchmark:e2e` — run all 15 cases including E2E
+  - `npm run orch:benchmark:check` — check for regressions vs baseline
+  - `npm run orch:benchmark:baseline` — save new baseline
 
 ## Your Task Queue
 
 Priority order:
 
-1. **Add more benchmark cases** — 5 is not enough. Add cases that exercise edge conditions:
-   - A clearly blue ocean opportunity (nascent market, 0-1 competitors)
-   - A commodity SaaS (CRM, project management — should score low)
-   - A high-demand but low-pay market (should score medium)
-   - A niche with strong demand but terrible distribution (should score medium)
-   - A marketplace opportunity (two-sided, should flag complexity risks)
-   Target: 10-12 total cases.
+1. **DONE — 12 calibration cases + 3 E2E cases** covering blue ocean, commodity, high-demand/low-pay, bad distribution, marketplace, declining market, and niche B2B.
 
-2. **Add regression detection** — Create `benchmarks/baseline.json` that stores the last known-good benchmark results. Write a comparison function that detects when scores drift more than 10% from baseline. Add `npm run orch:benchmark:check` that fails on regressions.
+2. **DONE — Regression detection** with `benchmarks/baseline.json`, `compareToBaseline()`, and `npm run orch:benchmark:check`.
 
 3. **Add collector coverage tests** — Create benchmark cases that validate collector output shapes. A "collector health check" that verifies each collector returns properly structured RawSignal[] with valid evidence.
 
 4. **Add integration test** — Create a test that runs `npm run orch:scan:quick` and validates the output has: at least 2 candidates, reasonable scores (1-10 range), valid market classifications, non-zero evidence counts.
 
 5. **Document benchmark results** — After each benchmark run, append results to `docs/benchmark-history.md` so score trends are visible over time.
+
+6. **Improve ocean classification coverage** — Several cases reveal that the market classifier is too liberal with purple/blue. Cases like print-shop (declining, should be red) and social-media-scheduler (crowded, should be red) currently classify as purple. Work with Lane 3 to tighten classification rules, then update expectations.
 
 ## Merge Protocol
 
@@ -97,10 +110,11 @@ git push
 Before committing:
 ```bash
 npm run build
-npm run orch:benchmark
+npm run orch:benchmark:e2e
+npm run orch:benchmark:check
 ```
 
-Both must pass. When adding new benchmark cases, ensure they pass with the current codebase before committing — you are establishing the baseline, not testing future changes.
+All must pass. When adding new benchmark cases, ensure they pass with the current codebase before committing — you are establishing the baseline, not testing future changes. After adding cases, run `npm run orch:benchmark:baseline` to update the baseline.
 
 ## What NOT To Do
 

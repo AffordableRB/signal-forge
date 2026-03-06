@@ -61,11 +61,12 @@ Priority order:
 Before committing:
 ```bash
 npm run build
-npm run orch:benchmark
+npm run orch:benchmark:e2e
+npm run orch:benchmark:check
 npm run orch:scan:quick
 ```
 
-All three must pass. Your changes affect confidence scores and evidence quality metrics. If benchmark confidence values change significantly, verify the change is an improvement.
+All must pass. Your changes affect confidence scores and evidence quality metrics. If `benchmark:check` reports warnings, verify the change is an improvement. If it reports regressions, fix before committing.
 
 ## What NOT To Do
 

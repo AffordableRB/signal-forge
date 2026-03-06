@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "createdAt": "2026-03-06T20:03:47.096Z",
+  "entries": [
+    {
+      "caseId": "missed-call-recovery",
+      "score": 6.75,
+      "ocean": "purple",
+      "confidence": 67,
+      "contradictions": 0,
+      "roi": 37.59
+    },
+    {
+      "caseId": "legal-intake",
+      "score": 6.25,
+      "ocean": "purple",
+      "confidence": 72,
+      "contradictions": 0,
+      "roi": 75.4
+    },
+    {
+      "caseId": "ai-resume-generator",
+      "score": 3,
+      "ocean": "red",
+      "confidence": 49,
+      "contradictions": 0,
+      "roi": 11.82
+    },
+    {
+      "caseId": "review-response-automation",
+      "score": 5.666666666666667,
+      "ocean": "purple",
+      "confidence": 66,
+      "contradictions": 0,
+      "roi": 32.57
+    },
+    {
+      "caseId": "hvac-dispatch",
+      "score": 6.083333333333333,
+      "ocean": "purple",
+      "confidence": 65,
+      "contradictions": 0,
+      "roi": 29.91
+    },
+    {
+      "caseId": "ai-safety-audit-manufacturing",
+      "score": 6.916666666666667,
+      "ocean": "blue",
+      "confidence": 71,
+      "contradictions": 0,
+      "roi": 20
+    },
+    {
+      "caseId": "commodity-crm",
+      "score": 3.5,
+      "ocean": "red",
+      "confidence": 53,
+      "contradictions": 15,
+      "roi": 13.64
+    },
+    {
+      "caseId": "social-media-scheduler-creators",
+      "score": 4.25,
+      "ocean": "purple",
+      "confidence": 61,
+      "contradictions": 25,
+      "roi": 16.82
+    },
+    {
+      "caseId": "rural-vet-ai-diagnostics",
+      "score": 5.25,
+      "ocean": "blue",
+      "confidence": 69,
+      "contradictions": 0,
+      "roi": 18.18
+    },
+    {
+      "caseId": "freelance-lab-tech-marketplace",
+      "score": 5,
+      "ocean": "purple",
+      "confidence": 64,
+      "contradictions": 0,
+      "roi": 28.27
+    },
+    {
+      "caseId": "print-shop-management",
+      "score": 3.75,
+      "ocean": "purple",
+      "confidence": 68,
+      "contradictions": 0,
+      "roi": 9.09
+    },
+    {
+      "caseId": "permit-expediting-ai",
+      "score": 6.666666666666667,
+      "ocean": "blue",
+      "confidence": 70,
+      "contradictions": 15,
+      "roi": 20
+    },
+    {
+      "caseId": "e2e-strong-opportunity",
+      "score": 7.55,
+      "ocean": "blue",
+      "confidence": 69,
+      "contradictions": 0,
+      "roi": 39.3,
+      "detectorScores": {
+        "demand": 8,
+        "painIntensity": 9,
+        "abilityToPay": 8,
+        "competitionWeakness": 10,
+        "easeToBuild": 7,
+        "distributionAccess": 3,
+        "workflowAnchor": 5,
+        "marketExpansion": 8,
+        "marketTiming": 6,
+        "revenueDensity": 4,
+        "switchingFriction": 5,
+        "aiAdvantage": 7
+      }
+    },
+    {
+      "caseId": "e2e-weak-opportunity",
+      "score": 1.35,
+      "ocean": "purple",
+      "confidence": 42,
+      "contradictions": 0,
+      "roi": 5.45,
+      "detectorScores": {
+        "demand": 3,
+        "painIntensity": 0,
+        "abilityToPay": 0,
+        "competitionWeakness": 1,
+        "easeToBuild": 5,
+        "distributionAccess": 0,
+        "workflowAnchor": 1,
+        "marketExpansion": 2,
+        "marketTiming": 1,
+        "revenueDensity": 0,
+        "switchingFriction": 5,
+        "aiAdvantage": 3
+      }
+    },
+    {
+      "caseId": "e2e-contradiction-demand-pay",
+      "score": 5.083333333333333,
+      "ocean": "purple",
+      "confidence": 53,
+      "contradictions": 25,
+      "roi": 9.07
+    }
+  ]
+}

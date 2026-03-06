@@ -23,10 +23,13 @@ The orchestrator is for development only. Production scans run through the Next.
 
 Before committing ANY change:
 1. `npm run build` must pass
-2. `npm run orch:benchmark` must pass (all 5 cases)
-3. `npm run orch:scan:quick` should produce reasonable results
+2. `npm run orch:benchmark` must pass (all 12 calibration cases)
+3. `npm run orch:benchmark:e2e` must pass (all 15 cases including E2E detector tests)
+4. `npm run orch:benchmark:check` must pass (no regressions vs baseline)
+5. `npm run orch:scan:quick` should produce reasonable results
 
 If benchmarks fail, your change introduced a regression. Fix it before committing.
+After fixing, run `npm run orch:benchmark:baseline` to update the baseline.
 
 ## Key Directories
 
