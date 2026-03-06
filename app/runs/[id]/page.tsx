@@ -102,6 +102,7 @@ export default function RunPage() {
               <th className="px-4 py-3 font-medium">Pay</th>
               <th className="px-4 py-3 font-medium">Comp</th>
               <th className="px-4 py-3 font-medium">Ease</th>
+              <th className="px-4 py-3 font-medium">Market</th>
               <th className="px-4 py-3 font-medium">Risks</th>
             </tr>
           </thead>
@@ -137,6 +138,17 @@ export default function RunPage() {
                 </td>
                 <td className="px-4 py-3 font-mono text-neutral-400">
                   {c.scores.breakdown['easeToBuild'] ?? '-'}
+                </td>
+                <td className="px-4 py-3">
+                  {c.marketStructure ? (
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                      c.marketStructure.type === 'blue' ? 'text-blue-400 bg-blue-950/40' :
+                      c.marketStructure.type === 'purple' ? 'text-purple-400 bg-purple-950/40' :
+                      'text-red-400 bg-red-950/40'
+                    }`}>
+                      {c.marketStructure.type}
+                    </span>
+                  ) : '-'}
                 </td>
                 <td className="px-4 py-3">
                   <RiskCount count={c.riskFlags.length} />

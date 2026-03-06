@@ -35,6 +35,65 @@ export interface OpportunityScores {
   breakdown: Record<string, number>;
 }
 
+export type OceanType = 'red' | 'blue' | 'purple';
+
+export interface MarketStructure {
+  type: OceanType;
+  reason: string;
+  competitorCount: number;
+  maturityLevel: 'nascent' | 'emerging' | 'growing' | 'mature' | 'declining';
+  innovationGap: number;
+  pricingSimilarity: number;
+}
+
+export interface PurpleOpportunity {
+  wedgeType: string;
+  title: string;
+  explanation: string;
+  feasibility: number;
+  impact: number;
+}
+
+export interface EconomicImpact {
+  timeCostHoursPerMonth: number;
+  laborCostPerMonth: [number, number];
+  revenueLossPerMonth: [number, number];
+  totalMonthlyCost: [number, number];
+  economicPainScore: number;
+  explanation: string;
+}
+
+export interface MarketSize {
+  potentialBuyers: number;
+  adoptionRate: number;
+  potentialCustomers: number;
+  avgMonthlyPrice: number;
+  revenueCeiling: number;
+  explanation: string;
+}
+
+export interface Momentum {
+  recent30d: number;
+  previous30d: number;
+  growthRate: number;
+  momentumScore: number;
+  trend: 'accelerating' | 'stable' | 'decelerating' | 'insufficient-data';
+}
+
+export interface StartupConcept {
+  name: string;
+  oneLiner: string;
+  wedge: string;
+  technology: string;
+  goToMarket: string;
+}
+
+export interface ValidationPlan {
+  interviewQuestions: string[];
+  outreachMessages: string[];
+  sevenDayPlan: string[];
+}
+
 export interface OpportunityCandidate {
   id: string;
   vertical: string;
@@ -48,6 +107,13 @@ export interface OpportunityCandidate {
   rejected: boolean;
   rejectionReasons: string[];
   riskFlags: RiskFlag[];
+  marketStructure?: MarketStructure;
+  purpleOpportunities?: PurpleOpportunity[];
+  economicImpact?: EconomicImpact;
+  marketSize?: MarketSize;
+  momentum?: Momentum;
+  startupConcepts?: StartupConcept[];
+  validationPlan?: ValidationPlan;
 }
 
 export interface RunRecord {
