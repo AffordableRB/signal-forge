@@ -1,6 +1,6 @@
 'use client';
 
-import { OpportunityCandidate } from '@/lib/types';
+import { OpportunityCandidate, DeepValidation } from '@/lib/types';
 import { ScoreBar } from './score-bar';
 import { RiskBadge } from './risk-badge';
 import { StarButton } from './star-button';
@@ -46,6 +46,7 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
   const mkt = c.marketSize;
   const mom = c.momentum;
   const plan = c.validationPlan;
+  const dv = c.deepValidation;
 
   return (
     <div className="space-y-8">
@@ -80,6 +81,9 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
         </div>
         {runId && <StarButton candidate={c} runId={runId} size="md" />}
       </div>
+
+      {/* Deep Validation Verdict */}
+      {dv && <DeepValidationPanel validation={dv} />}
 
       {/* Why This Exists */}
       <WhyThisExists candidate={c} />
@@ -349,6 +353,196 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Deep Validation Panel ─────────────────────────────────────────
+
+const VERDICT_STYLES = {
+  'GO': 'border-emerald-500/50 bg-emerald-950/20',
+  'CONDITIONAL': 'border-amber-500/50 bg-amber-950/20',
+  'NO-GO': 'border-red-500/50 bg-red-950/20',
+};
+
+const VERDICT_TEXT = {
+  'GO': 'text-emerald-400',
+  'CONDITIONAL': 'text-amber-400',
+  'NO-GO': 'text-red-400',
+};
+
+function DeepValidationPanel({ validation: dv }: { validation: DeepValidation }) {
+  const passed = dv.checks.filter(ch => ch.passed).length;
+  const total = dv.checks.length;
+
+  return (
+    <div className={`border-2 rounded-lg overflow-hidden ${VERDICT_STYLES[dv.verdict]}`}>
+      {/* Verdict header */}
+      <div className="px-6 py-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-4">
+            <span className={`text-3xl font-bold ${VERDICT_TEXT[dv.verdict]}`}>
+              {dv.verdict}
+            </span>
+            <span className="text-sm text-neutral-400">
+              {dv.confidencePercent}% confidence
+            </span>
+          </div>
+          <span className="text-sm text-neutral-500">
+            {passed}/{total} checks passed
+          </span>
+        </div>
+        <p className="text-sm text-neutral-300">{dv.verdictReasoning}</p>
+      </div>
+
+      {/* Validation checks */}
+      <div className="border-t border-neutral-800 px-6 py-4">
+        <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Validation Checks</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {dv.checks.map((ch, i) => (
+            <div key={i} className={`flex items-start gap-2 p-2 rounded ${
+              ch.passed ? 'bg-emerald-950/20' : 'bg-red-950/20'
+            }`}>
+              <span className={`text-xs font-bold mt-0.5 ${ch.passed ? 'text-emerald-400' : 'text-red-400'}`}>
+                {ch.passed ? 'PASS' : 'FAIL'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-neutral-300">{ch.name}</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 line-clamp-2">{ch.evidence}</div>
+              </div>
+              <span className="text-[10px] text-neutral-600 shrink-0">{ch.confidence}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Unit Economics */}
+      <div className="border-t border-neutral-800 px-6 py-4">
+        <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Unit Economics</h4>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
+          <div>
+            <div className="text-[10px] text-neutral-500">CAC</div>
+            <div className="text-sm text-neutral-200 font-mono">{dv.unitEconomics.estimatedCAC}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-neutral-500">LTV</div>
+            <div className="text-sm text-neutral-200 font-mono">{dv.unitEconomics.estimatedLTV}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-neutral-500">Margin</div>
+            <div className="text-sm text-neutral-200 font-mono">{dv.unitEconomics.estimatedMargin}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-neutral-500">Revenue @100</div>
+            <div className="text-sm text-neutral-200 font-mono">{dv.unitEconomics.monthlyRevenueAt100Customers}/mo</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-neutral-500">Break-even</div>
+            <div className="text-sm text-neutral-200 font-mono">{dv.unitEconomics.breakEvenCustomers} customers</div>
+          </div>
+        </div>
+        <p className="text-xs text-neutral-500">{dv.unitEconomics.reasoning}</p>
+      </div>
+
+      {/* Exact Gap + Biggest Risk */}
+      <div className="border-t border-neutral-800 px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Exact Gap in Market</h4>
+          <p className="text-sm text-neutral-300">{dv.exactGap}</p>
+        </div>
+        <div>
+          <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Biggest Risk</h4>
+          <p className="text-sm text-red-400/80">{dv.biggestRisk}</p>
+        </div>
+      </div>
+
+      {/* First 10 Customers */}
+      <div className="border-t border-neutral-800 px-6 py-4">
+        <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">How to Get Your First 10 Customers</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="text-[10px] text-neutral-500 mb-1">Target Segment</div>
+            <div className="text-sm text-neutral-300">{dv.first10Customers.segment}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-neutral-500 mb-1">How to Reach Them</div>
+            <div className="text-sm text-neutral-300">{dv.first10Customers.howToReach}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-neutral-500 mb-1">Expected Conversion</div>
+            <div className="text-sm text-neutral-300">{dv.first10Customers.estimatedConversionRate}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-neutral-500 mb-1">Example Outreach</div>
+            <div className="text-sm text-neutral-400 italic">&ldquo;{dv.first10Customers.exampleOutreach}&rdquo;</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Competitor Deep Dive */}
+      {dv.competitorDeepDive.length > 0 && (
+        <div className="border-t border-neutral-800 px-6 py-4">
+          <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Competitor Analysis</h4>
+          <div className="space-y-3">
+            {dv.competitorDeepDive.map((comp, i) => (
+              <div key={i} className="border border-neutral-800 rounded p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-neutral-200">{comp.name}</span>
+                  <span className="text-[10px] text-neutral-500">{comp.estimatedRevenue}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <span className="text-neutral-500">Weakness: </span>
+                    <span className="text-neutral-400">{comp.mainWeakness}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">You win: </span>
+                    <span className="text-emerald-400/80">{comp.whyYouWin}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Switching cost: </span>
+                    <span className="text-neutral-400">{comp.switchingCost}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Validation Tests */}
+      {dv.validationTests.length > 0 && (
+        <div className="border-t border-neutral-800 px-6 py-4">
+          <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Validation Tests to Run</h4>
+          <div className="space-y-2">
+            {dv.validationTests.map((vt, i) => (
+              <div key={i} className="border border-neutral-800 rounded p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-neutral-300 uppercase">{vt.testType}</span>
+                  <span className="text-[10px] text-neutral-500">{vt.timeRequired} / {vt.costRequired}</span>
+                </div>
+                <p className="text-xs text-neutral-400">{vt.description}</p>
+                <p className="text-[10px] text-emerald-500/70 mt-1">Success: {vt.successCriteria}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Kill Reasons */}
+      {dv.killReasons.length > 0 && (
+        <div className="border-t border-neutral-800 px-6 py-4">
+          <h4 className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Reasons This Could Fail</h4>
+          <ul className="space-y-1">
+            {dv.killReasons.map((kr, i) => (
+              <li key={i} className="text-xs text-red-400/70 flex items-start gap-2">
+                <span className="text-red-500 mt-0.5">-</span>
+                {kr}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

@@ -121,6 +121,7 @@ export default function Dashboard() {
   });
   const [launching, setLaunching] = useState(false);
   const [scanMode, setScanMode] = useState<ScanMode>('standard');
+  const [topic, setTopic] = useState('');
   const [scanError, setScanError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [currentPhase, setCurrentPhase] = useState(0);
@@ -192,7 +193,7 @@ export default function Dashboard() {
     const allSignals: RawSignal[] = [];
     const allStats: CollectorStat[] = [];
     const phases: PhaseStatus[] = [];
-    const queries = SEED_QUERIES; // Use all 12 queries
+    const scanTopic = topic.trim();
 
     const progress: ThoroughProgress = {
       totalSteps: 0,
@@ -255,6 +256,29 @@ export default function Dashboard() {
     }
 
     try {
+      // ── Generate topic-focused queries ────────────────────────────
+      let queries: string[];
+      if (scanTopic) {
+        try {
+          updateProgress({ currentRound: 'Generating queries...', currentCollector: 'AI' });
+          const qRes = await fetch('/api/scan/generate-queries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: scanTopic, count: 12 }),
+          });
+          if (qRes.ok) {
+            const { queries: generated } = await qRes.json();
+            queries = generated;
+          } else {
+            queries = SEED_QUERIES;
+          }
+        } catch {
+          queries = SEED_QUERIES;
+        }
+      } else {
+        queries = SEED_QUERIES;
+      }
+
       // ── Round 1: Discovery ──────────────────────────────────────
       const discoveryStart = Date.now();
       const discoverySteps = buildThoroughPlan(queries);
@@ -402,6 +426,7 @@ export default function Dashboard() {
         date: new Date().toISOString(),
         status: 'completed',
         scanMode: 'thorough',
+        topic: scanTopic || undefined,
         phases,
         candidates,
         candidateCount: (candidates as OpportunityCandidate[]).length,
@@ -423,7 +448,7 @@ export default function Dashboard() {
       setLaunching(false);
       setThoroughProgress(null);
     }
-  }, [runs]);
+  }, [runs, topic]);
 
   function handleRunScan() {
     if (scanMode === 'thorough') {
@@ -437,14 +462,14 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-100">Dashboard</h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            Run scans and explore ranked opportunities
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-neutral-100">SignalForge</h1>
+            <p className="text-sm text-neutral-500 mt-1">
+              Discover the best business opportunities in any industry
+            </p>
+          </div>
           <div className="flex rounded-lg overflow-hidden border border-neutral-700">
             {(['quick', 'standard', 'deep', 'thorough'] as ScanMode[]).map(mode => (
               <button
@@ -463,22 +488,50 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Topic input + scan button */}
+        <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !launching) handleRunScan(); }}
+              disabled={launching}
+              placeholder={scanMode === 'thorough'
+                ? 'Enter a topic to scan... e.g. "pet care", "construction", "fitness coaching"'
+                : 'Enter a topic (optional for quick/standard/deep)...'}
+              className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg text-neutral-200 text-sm placeholder-neutral-600 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            {topic && !launching && (
+              <button
+                onClick={() => setTopic('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-neutral-400 text-xs"
+              >
+                clear
+              </button>
+            )}
+          </div>
           <button
             onClick={handleRunScan}
-            disabled={launching}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+            disabled={launching || (scanMode === 'thorough' && !topic.trim())}
+            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
           >
-            {launching ? 'Scanning...' : 'Run Scan'}
+            {launching ? 'Scanning...' : 'Scan'}
           </button>
         </div>
-      </div>
 
-      {/* Scan mode description */}
-      {!launching && !scanError && (
-        <p className="text-xs text-neutral-600 mb-4 -mt-4 text-right">
-          {modeInfo.desc}
-        </p>
-      )}
+        {/* Mode description */}
+        {!launching && !scanError && (
+          <p className="text-xs text-neutral-600 mt-2">
+            {modeInfo.desc}
+            {scanMode === 'thorough' && !topic.trim() && (
+              <span className="text-amber-500 ml-2">Enter a topic to start a thorough scan</span>
+            )}
+          </p>
+        )}
+      </div>
 
       {scanError && (
         <div className="border border-red-900/50 bg-red-950/20 rounded-lg p-4 mb-6">

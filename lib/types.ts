@@ -136,6 +136,64 @@ export interface ScoringOutput {
   excludedNoiseSummary: string;
 }
 
+// ─── Deep Validation Types ──────────────────────────────────────────
+
+export type ValidationVerdict = 'GO' | 'CONDITIONAL' | 'NO-GO';
+
+export interface ValidationCheck {
+  name: string;
+  passed: boolean;
+  evidence: string;
+  confidence: number;
+}
+
+export interface UnitEconomics {
+  estimatedCAC: string;
+  estimatedLTV: string;
+  estimatedMargin: string;
+  monthlyRevenueAt100Customers: string;
+  breakEvenCustomers: number;
+  reasoning: string;
+}
+
+export interface CompetitorDeepDive {
+  name: string;
+  estimatedRevenue: string;
+  mainWeakness: string;
+  whyYouWin: string;
+  switchingCost: string;
+}
+
+export interface First10Customers {
+  segment: string;
+  howToReach: string;
+  estimatedConversionRate: string;
+  exampleOutreach: string;
+}
+
+export interface ValidationTest {
+  testType: string;
+  description: string;
+  successCriteria: string;
+  timeRequired: string;
+  costRequired: string;
+}
+
+export interface DeepValidation {
+  verdict: ValidationVerdict;
+  verdictReasoning: string;
+  confidencePercent: number;
+  checks: ValidationCheck[];
+  unitEconomics: UnitEconomics;
+  competitorDeepDive: CompetitorDeepDive[];
+  first10Customers: First10Customers;
+  exactGap: string;
+  unfairAdvantage: string;
+  biggestRisk: string;
+  validationTests: ValidationTest[];
+  killReasons: string[];
+}
+
 export interface OpportunityCandidate {
   id: string;
   vertical: string;
@@ -158,6 +216,7 @@ export interface OpportunityCandidate {
   validationPlan?: ValidationPlan;
   confidence?: ConfidenceBreakdown;
   scoringOutput?: ScoringOutput;
+  deepValidation?: DeepValidation;
 }
 
 export interface CollectorStat {
@@ -184,6 +243,7 @@ export interface RunRecord {
   date: string;
   status: 'running' | 'completed' | 'failed';
   scanMode?: ScanMode;
+  topic?: string;
   phases?: PhaseStatus[];
   topScore?: number;
   topOpportunity?: string;

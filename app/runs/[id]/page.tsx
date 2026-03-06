@@ -84,6 +84,9 @@ export default function RunPage() {
           </h1>
           <p className="text-sm text-neutral-500 mt-1">
             {new Date(run.date).toLocaleString()} &middot; {run.candidateCount} candidates
+            {run.topic && (
+              <span className="ml-2 text-neutral-400">topic: &ldquo;{run.topic}&rdquo;</span>
+            )}
             {run.scanMode && (
               <span className={`ml-2 text-xs font-medium px-1.5 py-0.5 rounded ${
                 run.scanMode === 'thorough' ? 'text-emerald-400 bg-emerald-950/40' :
