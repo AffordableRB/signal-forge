@@ -86,6 +86,7 @@ export default function RunPage() {
             {new Date(run.date).toLocaleString()} &middot; {run.candidateCount} candidates
             {run.scanMode && (
               <span className={`ml-2 text-xs font-medium px-1.5 py-0.5 rounded ${
+                run.scanMode === 'thorough' ? 'text-emerald-400 bg-emerald-950/40' :
                 run.scanMode === 'deep' ? 'text-purple-400 bg-purple-950/40' :
                 run.scanMode === 'quick' ? 'text-amber-400 bg-amber-950/40' :
                 'text-blue-400 bg-blue-950/40'

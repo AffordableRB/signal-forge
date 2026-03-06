@@ -168,7 +168,7 @@ export interface CollectorStat {
   error?: string;
 }
 
-export type ScanMode = 'quick' | 'standard' | 'deep';
+export type ScanMode = 'quick' | 'standard' | 'deep' | 'thorough';
 export type ScanPhase = 'discovery' | 'deep-evidence' | 'market-mapping' | 'cross-validation' | 'analysis';
 
 export interface PhaseStatus {

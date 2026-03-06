@@ -102,6 +102,26 @@ export interface CollectionResult {
   collectorStats: CollectorStat[];
 }
 
+// Factory to create a single collector by ID
+export function createCollectorById(id: string, opts: CollectionOptions = {}): Collector | null {
+  switch (id) {
+    case 'hackernews': return new HackerNewsCollector();
+    case 'search-intent': return new SearchIntentCollector();
+    case 'google-trends': return new GoogleTrendsCollector();
+    case 'reddit': return new RedditCollector(opts.redditResultLimit, opts.subredditDepth);
+    case 'reviews': return new ReviewCollector(opts.reviewSnippetLimit);
+    case 'jobs': return new UpworkCollector(opts.jobResultLimit);
+    case 'product-hunt': return new ProductHuntCollector();
+    case 'pricing': return new PricingCollector(opts.pricingQueryCount);
+    default: return null;
+  }
+}
+
+export const ALL_COLLECTOR_IDS = [
+  'hackernews', 'search-intent', 'google-trends',
+  'reddit', 'reviews', 'jobs', 'product-hunt', 'pricing',
+];
+
 export async function collectAllSignals(
   queries: string[],
   opts: CollectionOptions = {},

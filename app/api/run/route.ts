@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuid } from 'uuid';
-import { RunRecord, ScanMode } from '@/lib/types';
+import { RunRecord } from '@/lib/types';
 import { runPipeline } from '@/lib/engine/pipeline';
 
 export const maxDuration = 60;
 
-const VALID_MODES: ScanMode[] = ['quick', 'standard', 'deep'];
+// Thorough mode uses client-orchestrated /api/scan/* routes, not this endpoint
+const VALID_MODES = ['quick', 'standard', 'deep'] as const;
+type PipelineScanMode = (typeof VALID_MODES)[number];
 
 export async function POST(req: NextRequest) {
   const runId = uuid();
@@ -14,8 +16,8 @@ export async function POST(req: NextRequest) {
   // Parse scan mode from query string or body
   const url = new URL(req.url);
   const modeParam = url.searchParams.get('mode') ?? 'standard';
-  const scanMode: ScanMode = VALID_MODES.includes(modeParam as ScanMode)
-    ? (modeParam as ScanMode)
+  const scanMode: PipelineScanMode = VALID_MODES.includes(modeParam as PipelineScanMode)
+    ? (modeParam as PipelineScanMode)
     : 'standard';
 
   try {
