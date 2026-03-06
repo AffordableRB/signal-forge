@@ -1,10 +1,10 @@
 import { Collector } from './base';
 import { RawSignal, Evidence } from '../models/types';
-import { throttledFetchText } from './rate-limiter';
+import { throttledFetchText, hasProxyKey } from './rate-limiter';
 import { computeConfidence } from './classify';
 
-// Scrapes competitor pricing pages via Google search results.
-// Looks for pricing patterns, price increases, and enterprise lock-in signals.
+// Scrapes competitor pricing pages via search results.
+// Uses proxy for Google search (which blocks bots aggressively).
 
 const PRICE_PATTERNS = [
   /\$(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:\/?\s*(?:mo(?:nth)?|yr|year|user|seat))/gi,
@@ -16,17 +16,24 @@ const PRICE_PATTERNS = [
 ];
 
 const PRICE_HIKE_PATTERNS = [
-  /price\s*(?:increase|hike|raise|change)/gi,
-  /raised?\s+(?:the\s+)?price/gi,
-  /(?:doubled|tripled|increased)\s+(?:the\s+)?(?:price|cost|subscription)/gi,
-  /now\s+(?:costs?|charges?)\s+(?:more|\$\d+)/gi,
-  /used\s+to\s+(?:be|cost)\s+\$/gi,
+  /price\s*(?:increase|hike|raise|change)/i,
+  /raised?\s+(?:the\s+)?price/i,
+  /(?:doubled|tripled|increased)\s+(?:the\s+)?(?:price|cost|subscription)/i,
+  /now\s+(?:costs?|charges?)\s+(?:more|\$\d+)/i,
+  /used\s+to\s+(?:be|cost)\s+\$/i,
+  /too\s+expensive/i,
+  /overpriced/i,
 ];
 
 export class PricingCollector implements Collector {
   id = 'pricing';
 
   async collect(queries: string[]): Promise<RawSignal[]> {
+    if (!hasProxyKey()) {
+      console.warn('[PricingCollector] Skipped — set SCRAPER_API_KEY to enable');
+      return [];
+    }
+
     const signals: RawSignal[] = [];
 
     for (const query of queries) {
@@ -46,33 +53,23 @@ export class PricingCollector implements Collector {
 
   private async fetchPricingSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
-
-    // Search for pricing pages
-    await this.scrapePricingSearch(query, evidence);
-
-    // Search for pricing complaints/changes
-    await this.scrapePricingComplaints(query, evidence);
-
+    await Promise.allSettled([
+      this.scrapePricingSearch(query, evidence),
+      this.scrapePricingComplaints(query, evidence),
+    ]);
     return evidence;
   }
 
   private async scrapePricingSearch(query: string, evidence: Evidence[]): Promise<void> {
     try {
-      // Use Google search to find pricing pages
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query + ' pricing')}`;
-      const html = await throttledFetchText(searchUrl, {
-        headers: { 'Accept': 'text/html' },
-      });
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query + ' software pricing')}`;
+      const html = await throttledFetchText(searchUrl, { useProxy: true });
 
-      // Extract pricing-related snippets
       const snippets = this.extractSnippets(html);
 
       for (const snippet of snippets.slice(0, 8)) {
         const prices = this.extractPrices(snippet);
         const hasPriceHike = PRICE_HIKE_PATTERNS.some(p => p.test(snippet));
-
-        // Reset regex lastIndex
-        PRICE_HIKE_PATTERNS.forEach(p => p.lastIndex = 0);
 
         if (prices.length === 0 && !hasPriceHike) continue;
 
@@ -91,17 +88,15 @@ export class PricingCollector implements Collector {
           timestamp: Date.now(),
         });
       }
-    } catch {
-      // Search may block; non-fatal
+    } catch (err) {
+      console.warn('[PricingCollector] Search failed:', (err as Error).message);
     }
   }
 
   private async scrapePricingComplaints(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query + ' too expensive alternatives')}`;
-      const html = await throttledFetchText(searchUrl, {
-        headers: { 'Accept': 'text/html' },
-      });
+      const html = await throttledFetchText(searchUrl, { useProxy: true });
 
       const snippets = this.extractSnippets(html);
 
@@ -119,16 +114,20 @@ export class PricingCollector implements Collector {
           timestamp: Date.now(),
         });
       }
-    } catch {
-      // Non-fatal
+    } catch (err) {
+      console.warn('[PricingCollector] Complaints search failed:', (err as Error).message);
     }
   }
 
   private extractSnippets(html: string): string[] {
     const results: string[] = [];
     const patterns = [
-      /<span[^>]*class="[^"]*(?:st|snippet|description)[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
+      // Google search result snippets (various class names Google uses)
+      /<span[^>]*class="[^"]*(?:st|snippet)[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
       /<div[^>]*class="[^"]*(?:VwiC3b|IsZvec|s3v9rd)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      /<div[^>]*class="[^"]*BNeawe[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      // Generic longer text spans (fallback)
+      /<span[^>]*>([\s\S]{50,400}?)<\/span>/gi,
     ];
 
     for (const pattern of patterns) {

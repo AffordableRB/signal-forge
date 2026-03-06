@@ -1,10 +1,9 @@
 import { Collector } from './base';
 import { RawSignal, Evidence } from '../models/types';
-import { throttledFetchText } from './rate-limiter';
+import { throttledFetchText, hasProxyKey } from './rate-limiter';
 import { classifySignal, computeConfidence } from './classify';
 
-// Product Hunt collector using their RSS feed and public pages.
-// Identifies competition signals (crowded categories) and demand (new launches).
+// Product Hunt collector — uses proxy for search pages, tries RSS without proxy.
 
 export class ProductHuntCollector implements Collector {
   id = 'product-hunt';
@@ -30,18 +29,27 @@ export class ProductHuntCollector implements Collector {
   private async fetchPHSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Search Product Hunt
+    // Search Product Hunt (needs proxy)
+    if (hasProxyKey()) {
+      await this.searchPH(query, evidence);
+    }
+
+    // RSS feed (often works without proxy)
+    await this.fetchRSS(query, evidence);
+
+    return evidence;
+  }
+
+  private async searchPH(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const url = `https://www.producthunt.com/search?q=${encodeURIComponent(query)}`;
-      const html = await throttledFetchText(url, {
-        headers: { 'Accept': 'text/html' },
-      });
+      const html = await throttledFetchText(url, { useProxy: true });
 
-      // Extract product names and taglines
       const products = this.extractMatches(html, [
         /<h3[^>]*>([\s\S]*?)<\/h3>/gi,
         /<div[^>]*class="[^"]*tagline[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
         /<p[^>]*class="[^"]*text-secondary[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
+        /<div[^>]*data-test="[^"]*product-item[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
       ]);
 
       let productCount = 0;
@@ -50,20 +58,17 @@ export class ProductHuntCollector implements Collector {
         if (clean.length < 10 || clean.length > 500) continue;
 
         productCount++;
-        const signalType = classifySignal(clean);
-
         evidence.push({
           source: 'producthunt:search',
           url,
           excerpt: `PH product: ${clean.slice(0, 250)}`,
-          signalType: signalType === 'demand' ? 'demand' : 'competition',
+          signalType: classifySignal(clean) === 'demand' ? 'demand' : 'competition',
           sourceTier: 2,
           confidence: computeConfidence(clean, 0.6, 0.75),
           timestamp: Date.now(),
         });
       }
 
-      // If many products found, emit a competition saturation signal
       if (productCount >= 5) {
         evidence.push({
           source: 'producthunt:analysis',
@@ -75,11 +80,12 @@ export class ProductHuntCollector implements Collector {
           timestamp: Date.now(),
         });
       }
-    } catch {
-      // PH may block; non-fatal
+    } catch (err) {
+      console.warn('[ProductHuntCollector] Search failed:', (err as Error).message);
     }
+  }
 
-    // Try RSS feed for recent launches
+  private async fetchRSS(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const rssUrl = 'https://www.producthunt.com/feed';
       const xml = await throttledFetchText(rssUrl, {
@@ -99,28 +105,22 @@ export class ProductHuntCollector implements Collector {
         const desc = this.stripHtml(descMatch?.[1] ?? '');
         const combined = `${title} ${desc}`.toLowerCase();
 
-        // Check if this launch is relevant to our query
         const relevant = keywords.some(kw => combined.includes(kw));
         if (!relevant) continue;
 
-        const link = linkMatch?.[1]?.trim() ?? '';
-        const pubDate = dateMatch?.[1]?.trim();
-
         evidence.push({
           source: 'producthunt:launch',
-          url: link,
+          url: linkMatch?.[1]?.trim() ?? '',
           excerpt: `Recent launch: ${title}. ${desc}`.slice(0, 300),
           signalType: 'competition',
           sourceTier: 2,
           confidence: 0.65,
-          timestamp: pubDate ? new Date(pubDate).getTime() : Date.now(),
+          timestamp: dateMatch?.[1] ? new Date(dateMatch[1].trim()).getTime() : Date.now(),
         });
       }
     } catch {
-      // RSS feed may not be available; non-fatal
+      // RSS may not be available
     }
-
-    return evidence;
   }
 
   private extractMatches(html: string, patterns: RegExp[]): string[] {

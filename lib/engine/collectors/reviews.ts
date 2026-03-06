@@ -1,15 +1,20 @@
 import { Collector } from './base';
 import { RawSignal, Evidence } from '../models/types';
-import { throttledFetchText } from './rate-limiter';
+import { throttledFetchText, hasProxyKey } from './rate-limiter';
 import { classifySignal, computeConfidence } from './classify';
 
-// Scrapes publicly accessible review snippets from G2, Capterra, and Trustpilot
-// search results pages. Extracts visible text from HTML.
+// Scrapes publicly accessible review snippets from G2, Capterra, and Trustpilot.
+// Requires SCRAPER_API_KEY env var to bypass bot protection.
 
 export class ReviewCollector implements Collector {
   id = 'reviews';
 
   async collect(queries: string[]): Promise<RawSignal[]> {
+    if (!hasProxyKey()) {
+      console.warn('[ReviewCollector] Skipped — set SCRAPER_API_KEY to enable');
+      return [];
+    }
+
     const signals: RawSignal[] = [];
 
     for (const query of queries) {
@@ -29,36 +34,29 @@ export class ReviewCollector implements Collector {
 
   private async fetchReviewSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
-
-    // G2 search
-    await this.scrapeG2(query, evidence);
-
-    // Capterra search
-    await this.scrapeCapterra(query, evidence);
-
-    // Trustpilot search
-    await this.scrapeTrustpilot(query, evidence);
-
+    await Promise.allSettled([
+      this.scrapeG2(query, evidence),
+      this.scrapeCapterra(query, evidence),
+      this.scrapeTrustpilot(query, evidence),
+    ]);
     return evidence;
   }
 
   private async scrapeG2(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const url = `https://www.g2.com/search?query=${encodeURIComponent(query)}`;
-      const html = await throttledFetchText(url, {
-        headers: { 'Accept': 'text/html' },
-      });
+      const html = await throttledFetchText(url, { useProxy: true });
 
-      // Extract product cards and review snippets from HTML
       const snippets = this.extractTextSnippets(html, [
         /<div[^>]*class="[^"]*review[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
         /<p[^>]*class="[^"]*paragraph[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
-        /<span[^>]*class="[^"]*star-rating[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
+        /<div[^>]*class="[^"]*product-card[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+        /<span[^>]*>([\s\S]{30,300}?)<\/span>/gi,
       ]);
 
-      for (const snippet of snippets.slice(0, 5)) {
+      for (const snippet of snippets.slice(0, 8)) {
         const clean = this.stripHtml(snippet);
-        if (clean.length < 20) continue;
+        if (clean.length < 20 || clean.length > 500) continue;
 
         evidence.push({
           source: 'g2:reviews',
@@ -70,26 +68,26 @@ export class ReviewCollector implements Collector {
           timestamp: Date.now(),
         });
       }
-    } catch {
-      // G2 may block; non-fatal
+    } catch (err) {
+      console.warn('[ReviewCollector] G2 failed:', (err as Error).message);
     }
   }
 
   private async scrapeCapterra(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const url = `https://www.capterra.com/search/?query=${encodeURIComponent(query)}`;
-      const html = await throttledFetchText(url, {
-        headers: { 'Accept': 'text/html' },
-      });
+      const html = await throttledFetchText(url, { useProxy: true });
 
       const snippets = this.extractTextSnippets(html, [
         /<div[^>]*class="[^"]*review[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
         /<p[^>]*class="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
+        /<div[^>]*class="[^"]*listing[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+        /<span[^>]*>([\s\S]{30,300}?)<\/span>/gi,
       ]);
 
-      for (const snippet of snippets.slice(0, 5)) {
+      for (const snippet of snippets.slice(0, 8)) {
         const clean = this.stripHtml(snippet);
-        if (clean.length < 20) continue;
+        if (clean.length < 20 || clean.length > 500) continue;
 
         evidence.push({
           source: 'capterra:reviews',
@@ -101,26 +99,26 @@ export class ReviewCollector implements Collector {
           timestamp: Date.now(),
         });
       }
-    } catch {
-      // Capterra may block; non-fatal
+    } catch (err) {
+      console.warn('[ReviewCollector] Capterra failed:', (err as Error).message);
     }
   }
 
   private async scrapeTrustpilot(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const url = `https://www.trustpilot.com/search?query=${encodeURIComponent(query)}`;
-      const html = await throttledFetchText(url, {
-        headers: { 'Accept': 'text/html' },
-      });
+      const html = await throttledFetchText(url, { useProxy: true });
 
       const snippets = this.extractTextSnippets(html, [
         /<p[^>]*class="[^"]*review-content[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
         /<a[^>]*class="[^"]*business-unit[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+        /<div[^>]*class="[^"]*styles_reviewContent[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+        /<p[^>]*data-service-review-text[^>]*>([\s\S]*?)<\/p>/gi,
       ]);
 
-      for (const snippet of snippets.slice(0, 5)) {
+      for (const snippet of snippets.slice(0, 8)) {
         const clean = this.stripHtml(snippet);
-        if (clean.length < 15) continue;
+        if (clean.length < 15 || clean.length > 500) continue;
 
         evidence.push({
           source: 'trustpilot:reviews',
@@ -132,8 +130,8 @@ export class ReviewCollector implements Collector {
           timestamp: Date.now(),
         });
       }
-    } catch {
-      // Trustpilot may block; non-fatal
+    } catch (err) {
+      console.warn('[ReviewCollector] Trustpilot failed:', (err as Error).message);
     }
   }
 

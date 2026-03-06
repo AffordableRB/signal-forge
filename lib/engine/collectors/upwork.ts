@@ -1,23 +1,20 @@
 import { Collector } from './base';
 import { RawSignal, Evidence } from '../models/types';
-import { throttledFetchText } from './rate-limiter';
+import { throttledFetchText, hasProxyKey } from './rate-limiter';
 import { classifySignal, computeConfidence } from './classify';
 
 // Scrapes Upwork job search results for demand and money signals.
-// Companies hiring for solutions = validated demand.
-
-const JOB_PREFIXES = [
-  'build software for',
-  'automation for',
-  'SaaS tool needed',
-  'develop app for',
-  'need developer for',
-];
+// Requires SCRAPER_API_KEY to bypass bot protection.
 
 export class UpworkCollector implements Collector {
   id = 'upwork';
 
   async collect(queries: string[]): Promise<RawSignal[]> {
+    if (!hasProxyKey()) {
+      console.warn('[UpworkCollector] Skipped — set SCRAPER_API_KEY to enable');
+      return [];
+    }
+
     const signals: RawSignal[] = [];
 
     for (const query of queries) {
@@ -38,64 +35,90 @@ export class UpworkCollector implements Collector {
   private async fetchUpworkSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Search Upwork directly
-    await this.searchUpwork(query, evidence);
-
-    // Try with job-related prefixes for broader reach
-    const keywords = query.split(/\s+/).filter(w => w.length > 3).slice(0, 2).join(' ');
-    for (const prefix of JOB_PREFIXES.slice(0, 2)) {
-      await this.searchUpwork(`${prefix} ${keywords}`, evidence);
-    }
-
-    return evidence;
-  }
-
-  private async searchUpwork(query: string, evidence: Evidence[]): Promise<void> {
     try {
       const url = `https://www.upwork.com/search/jobs/?q=${encodeURIComponent(query)}&sort=recency`;
-      const html = await throttledFetchText(url, {
-        headers: { 'Accept': 'text/html' },
-      });
+      const html = await throttledFetchText(url, { useProxy: true });
 
-      // Extract job titles and descriptions from HTML
+      // Extract job cards from Upwork's HTML
+      const jobBlocks = this.extractMatches(html, [
+        /<section[^>]*class="[^"]*job-tile[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
+        /<div[^>]*class="[^"]*job-tile[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+        /<article[^>]*>([\s\S]*?)<\/article>/gi,
+      ]);
+
+      // Also get individual fields
       const jobTitles = this.extractMatches(html, [
-        /<h2[^>]*class="[^"]*job-title[^"]*"[^>]*>([\s\S]*?)<\/h2>/gi,
-        /<a[^>]*class="[^"]*job-title-link[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+        /<h2[^>]*>([\s\S]*?)<\/h2>/gi,
+        /<a[^>]*class="[^"]*job-title[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
       ]);
 
-      const jobDescriptions = this.extractMatches(html, [
+      const descriptions = this.extractMatches(html, [
         /<span[^>]*class="[^"]*job-description[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-        /<p[^>]*data-test="[^"]*Description[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
+        /<p[^>]*data-test="[^"]*UpCLineClamp[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
+        /<span[^>]*data-test="[^"]*Description[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
       ]);
 
-      // Extract budget/pricing info
       const budgets = this.extractMatches(html, [
         /<span[^>]*class="[^"]*budget[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-        /\$[\d,]+(?:\s*-\s*\$[\d,]+)?/g,
+        /<strong[^>]*data-test="[^"]*budget[^"]*"[^>]*>([\s\S]*?)<\/strong>/gi,
       ]);
 
-      const allSnippets = [...jobTitles, ...jobDescriptions];
+      // Process job blocks first (most complete)
+      for (const block of jobBlocks.slice(0, 10)) {
+        const clean = this.stripHtml(block);
+        if (clean.length < 20) continue;
 
-      for (const snippet of allSnippets.slice(0, 8)) {
-        const clean = this.stripHtml(snippet);
-        if (clean.length < 10) continue;
-
-        const hasBudget = budgets.some(b => b.includes('$'));
-        const signalType = classifySignal(clean);
+        const hasBudget = /\$\d/.test(clean);
 
         evidence.push({
           source: 'upwork:jobs',
-          url: `https://www.upwork.com/search/jobs/?q=${encodeURIComponent(query)}`,
-          excerpt: `Job post: ${clean.slice(0, 250)}${hasBudget ? ` [Budget signals found]` : ''}`,
-          signalType: hasBudget ? 'money' : (signalType === 'pain' ? 'pain' : 'demand'),
+          url,
+          excerpt: `Job: ${clean.slice(0, 280)}`,
+          signalType: hasBudget ? 'money' : 'demand',
           sourceTier: 1,
           confidence: computeConfidence(clean, 0.8, 0.9),
           timestamp: Date.now(),
         });
       }
-    } catch {
-      // Upwork may block or require auth; non-fatal
+
+      // If no job blocks, try individual fields
+      if (evidence.length === 0) {
+        const allSnippets = [...jobTitles, ...descriptions];
+        const hasBudgets = budgets.some(b => /\$\d/.test(b));
+
+        for (const snippet of allSnippets.slice(0, 8)) {
+          const clean = this.stripHtml(snippet);
+          if (clean.length < 10 || clean.length > 500) continue;
+
+          evidence.push({
+            source: 'upwork:jobs',
+            url,
+            excerpt: `Job post: ${clean.slice(0, 250)}${hasBudgets ? ' [Budget signals found]' : ''}`,
+            signalType: hasBudgets ? 'money' : (classifySignal(clean) === 'pain' ? 'pain' : 'demand'),
+            sourceTier: 1,
+            confidence: computeConfidence(clean, 0.8, 0.9),
+            timestamp: Date.now(),
+          });
+        }
+      }
+
+      // Emit aggregate signal if jobs found
+      if (evidence.length > 0) {
+        evidence.push({
+          source: 'upwork:analysis',
+          url,
+          excerpt: `Found ${evidence.length} active job postings for "${query}" on Upwork — companies are actively hiring for this solution.`,
+          signalType: 'demand',
+          sourceTier: 1,
+          confidence: 0.85,
+          timestamp: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.warn('[UpworkCollector] Failed:', (err as Error).message);
     }
+
+    return evidence;
   }
 
   private extractMatches(html: string, patterns: RegExp[]): string[] {
