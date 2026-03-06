@@ -8,7 +8,12 @@
     "start": "next start",
     "lint": "next lint",
     "scan:test": "npx tsx scripts/scan-test.ts",
-    "benchmark": "npx tsx scripts/benchmark.ts"
+    "benchmark": "npx tsx scripts/benchmark.ts",
+    "orch": "npx tsx scripts/orchestrator.ts",
+    "orch:scan": "npx tsx scripts/orchestrator.ts scan",
+    "orch:scan:quick": "npx tsx scripts/orchestrator.ts scan --mode quick",
+    "orch:scan:deep": "npx tsx scripts/orchestrator.ts scan --mode deep",
+    "orch:benchmark": "npx tsx scripts/orchestrator.ts benchmark"
   },
   "dependencies": {
     "next": "14.2.35",
