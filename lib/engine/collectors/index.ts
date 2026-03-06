@@ -18,7 +18,17 @@ export interface CollectorStat {
   error?: string;
 }
 
-// Fast collectors (direct APIs, no proxy needed) — run first
+export interface CollectionOptions {
+  fastTimeoutMs?: number;
+  proxyTimeoutMs?: number;
+  redditResultLimit?: number;
+  subredditDepth?: number;
+  reviewSnippetLimit?: number;
+  pricingQueryCount?: number;
+  jobResultLimit?: number;
+}
+
+// Fast collectors (direct APIs, no proxy needed)
 function createFastCollectors(): Collector[] {
   return [
     new HackerNewsCollector(),
@@ -27,15 +37,14 @@ function createFastCollectors(): Collector[] {
   ];
 }
 
-// Slow collectors (need proxy, may take 10-30s per request)
-// Reddit moved here — Reddit blocks cloud IPs, needs proxy
-function createProxyCollectors(): Collector[] {
+// Slow collectors (need proxy)
+function createProxyCollectors(opts: CollectionOptions): Collector[] {
   return [
-    new RedditCollector(),
-    new ReviewCollector(),
-    new UpworkCollector(),
+    new RedditCollector(opts.redditResultLimit, opts.subredditDepth),
+    new ReviewCollector(opts.reviewSnippetLimit),
+    new UpworkCollector(opts.jobResultLimit),
     new ProductHuntCollector(),
-    new PricingCollector(),
+    new PricingCollector(opts.pricingQueryCount),
   ];
 }
 
@@ -93,11 +102,16 @@ export interface CollectionResult {
   collectorStats: CollectorStat[];
 }
 
-export async function collectAllSignals(queries: string[]): Promise<CollectionResult> {
-  const fast = createFastCollectors().map(c => withTimeout(c, 25000));
-  const proxy = createProxyCollectors().map(c => withTimeout(c, 40000));
+export async function collectAllSignals(
+  queries: string[],
+  opts: CollectionOptions = {},
+): Promise<CollectionResult> {
+  const fastTimeout = opts.fastTimeoutMs ?? 25000;
+  const proxyTimeout = opts.proxyTimeoutMs ?? 40000;
 
-  // Run fast and proxy collectors simultaneously
+  const fast = createFastCollectors().map(c => withTimeout(c, fastTimeout));
+  const proxy = createProxyCollectors(opts).map(c => withTimeout(c, proxyTimeout));
+
   const all = [...fast, ...proxy];
   const results = await Promise.allSettled(
     all.map(c => c.collect(queries))
@@ -122,7 +136,6 @@ export async function collectAllSignals(queries: string[]): Promise<CollectionRe
     }
   }
 
-  // Deduplicate evidence within each signal
   for (const signal of allSignals) {
     signal.evidence = deduplicateEvidence(signal.evidence);
   }

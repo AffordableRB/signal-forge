@@ -168,10 +168,23 @@ export interface CollectorStat {
   error?: string;
 }
 
+export type ScanMode = 'quick' | 'standard' | 'deep';
+export type ScanPhase = 'discovery' | 'deep-evidence' | 'market-mapping' | 'cross-validation' | 'analysis';
+
+export interface PhaseStatus {
+  id: ScanPhase;
+  label: string;
+  status: 'pending' | 'running' | 'completed' | 'skipped';
+  durationMs?: number;
+  signalsAdded?: number;
+}
+
 export interface RunRecord {
   id: string;
   date: string;
   status: 'running' | 'completed' | 'failed';
+  scanMode?: ScanMode;
+  phases?: PhaseStatus[];
   topScore?: number;
   topOpportunity?: string;
   candidateCount?: number;

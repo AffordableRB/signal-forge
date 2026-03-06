@@ -84,10 +84,48 @@ export default function RunPage() {
           </h1>
           <p className="text-sm text-neutral-500 mt-1">
             {new Date(run.date).toLocaleString()} &middot; {run.candidateCount} candidates
+            {run.scanMode && (
+              <span className={`ml-2 text-xs font-medium px-1.5 py-0.5 rounded ${
+                run.scanMode === 'deep' ? 'text-purple-400 bg-purple-950/40' :
+                run.scanMode === 'quick' ? 'text-amber-400 bg-amber-950/40' :
+                'text-blue-400 bg-blue-950/40'
+              }`}>
+                {run.scanMode}
+              </span>
+            )}
           </p>
         </div>
         <StatusDot status={run.status} />
       </div>
+
+      {/* Phase Summary */}
+      {run.phases && run.phases.length > 0 && (
+        <div className="border border-neutral-800 rounded-lg p-5 mb-6">
+          <h3 className="text-sm font-semibold text-neutral-300 mb-3">Pipeline Phases</h3>
+          <div className="flex gap-2">
+            {run.phases.map(phase => (
+              <div key={phase.id} className="flex-1">
+                <div className={`h-1.5 rounded-full ${
+                  phase.status === 'completed' ? 'bg-emerald-500' :
+                  phase.status === 'skipped' ? 'bg-neutral-700' :
+                  'bg-amber-500'
+                }`} />
+                <div className="mt-1.5">
+                  <p className="text-[10px] font-medium text-neutral-400">{phase.label}</p>
+                  <p className="text-[10px] text-neutral-600">
+                    {phase.status === 'skipped' ? 'skipped' : (
+                      <>
+                        {((phase.durationMs ?? 0) / 1000).toFixed(1)}s
+                        {(phase.signalsAdded ?? 0) > 0 && ` · +${phase.signalsAdded}`}
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Collector Stats */}
       {run.collectorStats && run.collectorStats.length > 0 && (

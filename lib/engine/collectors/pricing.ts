@@ -27,6 +27,11 @@ const PRICE_HIKE_PATTERNS = [
 
 export class PricingCollector implements Collector {
   id = 'pricing';
+  private queryCount: number;
+
+  constructor(queryCount?: number) {
+    this.queryCount = queryCount ?? 2;
+  }
 
   async collect(queries: string[]): Promise<RawSignal[]> {
     if (!hasProxyKey()) {
@@ -36,8 +41,7 @@ export class PricingCollector implements Collector {
 
     const signals: RawSignal[] = [];
 
-    // Limit to 2 queries to stay within timeout (each = 1 proxy request to Google)
-    for (const query of queries.slice(0, 2)) {
+    for (const query of queries.slice(0, this.queryCount)) {
       const evidence = await this.fetchPricingSignals(query);
       if (evidence.length > 0) {
         signals.push({

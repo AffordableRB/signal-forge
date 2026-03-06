@@ -9,6 +9,11 @@ import { classifySignal, computeConfidence } from './classify';
 
 export class UpworkCollector implements Collector {
   id = 'jobs';
+  private jobLimit: number;
+
+  constructor(jobLimit?: number) {
+    this.jobLimit = jobLimit ?? 10;
+  }
 
   async collect(queries: string[]): Promise<RawSignal[]> {
     if (!hasProxyKey()) {
@@ -55,7 +60,7 @@ export class UpworkCollector implements Collector {
 
       const allSnippets = [...jobCards, ...snippets];
 
-      for (const snippet of allSnippets.slice(0, 10)) {
+      for (const snippet of allSnippets.slice(0, this.jobLimit)) {
         const clean = this.stripHtml(snippet);
         if (clean.length < 15 || clean.length > 600) continue;
 

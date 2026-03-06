@@ -8,6 +8,11 @@ import { classifySignal, computeConfidence } from './classify';
 
 export class ReviewCollector implements Collector {
   id = 'reviews';
+  private snippetLimit: number;
+
+  constructor(snippetLimit?: number) {
+    this.snippetLimit = snippetLimit ?? 8;
+  }
 
   async collect(queries: string[]): Promise<RawSignal[]> {
     if (!hasProxyKey()) {
@@ -54,7 +59,7 @@ export class ReviewCollector implements Collector {
         /<span[^>]*>([\s\S]{30,300}?)<\/span>/gi,
       ]);
 
-      for (const snippet of snippets.slice(0, 8)) {
+      for (const snippet of snippets.slice(0, this.snippetLimit)) {
         const clean = this.stripHtml(snippet);
         if (clean.length < 20 || clean.length > 500) continue;
 
@@ -85,7 +90,7 @@ export class ReviewCollector implements Collector {
         /<span[^>]*>([\s\S]{30,300}?)<\/span>/gi,
       ]);
 
-      for (const snippet of snippets.slice(0, 8)) {
+      for (const snippet of snippets.slice(0, this.snippetLimit)) {
         const clean = this.stripHtml(snippet);
         if (clean.length < 20 || clean.length > 500) continue;
 
@@ -116,7 +121,7 @@ export class ReviewCollector implements Collector {
         /<p[^>]*data-service-review-text[^>]*>([\s\S]*?)<\/p>/gi,
       ]);
 
-      for (const snippet of snippets.slice(0, 8)) {
+      for (const snippet of snippets.slice(0, this.snippetLimit)) {
         const clean = this.stripHtml(snippet);
         if (clean.length < 15 || clean.length > 500) continue;
 

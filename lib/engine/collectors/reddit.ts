@@ -30,18 +30,30 @@ interface RedditListing {
 
 export class RedditCollector implements Collector {
   id = 'reddit';
+  private resultLimit: number;
+  private subDepth: number;
+
+  constructor(resultLimit?: number, subDepth?: number) {
+    this.resultLimit = resultLimit ?? 25;
+    this.subDepth = subDepth ?? 2;
+  }
 
   async collect(queries: string[]): Promise<RawSignal[]> {
-    const signals: RawSignal[] = [];
+    // Limit queries to avoid timeout — each query = 1 global + N sub searches via proxy
+    const maxQueries = Math.min(queries.length, 2);
+    const results = await Promise.allSettled(
+      queries.slice(0, maxQueries).map(q => this.fetchRedditSignals(q))
+    );
 
-    for (const query of queries) {
-      const evidence = await this.fetchRedditSignals(query);
-      if (evidence.length > 0) {
+    const signals: RawSignal[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'fulfilled' && result.value.length > 0) {
         signals.push({
           collectorId: this.id,
           timestamp: new Date().toISOString(),
-          query,
-          evidence,
+          query: queries[i],
+          evidence: result.value,
         });
       }
     }
@@ -54,7 +66,7 @@ export class RedditCollector implements Collector {
 
     // Search across Reddit — route through proxy if available (Reddit blocks cloud IPs)
     try {
-      const searchUrl = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&limit=25&sort=relevance&t=year`;
+      const searchUrl = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&limit=${this.resultLimit}&sort=relevance&t=year`;
       const useProxy = hasProxyKey();
       const data = await throttledFetchJson<RedditListing>(searchUrl, {
         headers: { 'Accept': 'application/json' },
@@ -98,17 +110,17 @@ export class RedditCollector implements Collector {
       console.warn(`[RedditCollector] Search failed for "${query}":`, (err as Error).message);
     }
 
-    // Also search specific subreddits for higher relevance
-    const topSubs = TARGET_SUBREDDITS.slice(0, 2);
-    for (const sub of topSubs) {
+    // Also search specific subreddits in parallel for higher relevance
+    const topSubs = TARGET_SUBREDDITS.slice(0, this.subDepth);
+    const subQueryKeywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+
+    await Promise.allSettled(topSubs.map(async (sub) => {
       try {
         const subUrl = `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&limit=10&sort=relevance&t=year`;
         const data = await throttledFetchJson<RedditListing>(subUrl, {
           headers: { 'Accept': 'application/json' },
           useProxy: hasProxyKey(),
         });
-
-        const subQueryKeywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
 
         for (const post of data.data.children) {
           const p = post.data;
@@ -132,7 +144,7 @@ export class RedditCollector implements Collector {
       } catch {
         // Subreddit search failures are non-fatal
       }
-    }
+    }));
 
     return evidence;
   }
