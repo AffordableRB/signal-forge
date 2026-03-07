@@ -134,9 +134,26 @@ export async function runPipeline(
 
   // ─── Cluster & Analyze ──────────────────────────────────────────
   const candidates = clusterSignals(allSignals);
-  const analyzed = isLLMAvailable()
-    ? await llmAnalyzeAll(candidates)
-    : analyzeAll(candidates);
+  let analyzed: OpportunityCandidate[];
+
+  if (isLLMAvailable() && hasTime()) {
+    // For quick/standard modes, limit LLM analysis to top candidates by keyword score
+    // to stay within Vercel's 60s timeout
+    const maxLLM = mode === 'quick' ? 5 : mode === 'standard' ? 8 : candidates.length;
+    if (candidates.length > maxLLM) {
+      // Pre-score with keyword detectors, LLM-analyze only the top N
+      const keywordScored = analyzeAll(candidates);
+      const ranked = scoreAll(keywordScored).sort((a, b) => b.scores.final - a.scores.final);
+      const topForLLM = ranked.slice(0, maxLLM);
+      const rest = ranked.slice(maxLLM);
+      const llmAnalyzed = await llmAnalyzeAll(topForLLM);
+      analyzed = [...llmAnalyzed, ...rest];
+    } else {
+      analyzed = await llmAnalyzeAll(candidates);
+    }
+  } else {
+    analyzed = analyzeAll(candidates);
+  }
 
   // ─── Phase 3: Market Mapping ────────────────────────────────────
   if (config.phases.includes('market-mapping') && hasTime()) {
