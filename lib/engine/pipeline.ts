@@ -12,6 +12,7 @@ import { applyFilters } from './filters';
 import { applyKillSwitch } from './reality/kill-switch';
 import { SEED_QUERIES } from './config/seed-queries';
 import { ScanMode, ScanPhase, SCAN_MODES, PHASES } from './config/scan-modes';
+import { generateQueries } from './config/query-generator';
 import { estimateEconomicImpact } from './detectors/economic-impact';
 import { estimateEconomicImpactV2 } from './detectors/economic-impact-v2';
 import { analyzeMomentum } from './detectors/momentum';
@@ -50,9 +51,14 @@ export type PhaseCallback = (progress: PhaseProgress) => void;
 export async function runPipeline(
   mode: ScanMode = 'standard',
   onPhase?: PhaseCallback,
+  topic?: string,
 ): Promise<PipelineResult> {
   const config = SCAN_MODES[mode];
-  const queries = SEED_QUERIES.slice(0, config.queryCount);
+
+  // Generate topic-focused queries when a topic is provided, otherwise use seed queries
+  const queries = topic
+    ? await generateQueries(topic, config.queryCount)
+    : SEED_QUERIES.slice(0, config.queryCount);
   const phases: PhaseProgress[] = [];
   let allSignals: RawSignal[] = [];
   let allStats: CollectorStat[] = [];

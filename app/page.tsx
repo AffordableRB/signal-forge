@@ -161,7 +161,12 @@ export default function Dashboard() {
     setLaunching(true);
     setScanError(null);
     try {
-      const res = await fetch(`/api/run?mode=${scanMode}`, { method: 'POST' });
+      const scanTopic = topic.trim();
+      const res = await fetch(`/api/run?mode=${scanMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: scanTopic || undefined }),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error ?? `Server error (${res.status})`);

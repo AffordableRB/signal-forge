@@ -13,15 +13,17 @@ export async function POST(req: NextRequest) {
   const runId = uuid();
   const now = new Date().toISOString();
 
-  // Parse scan mode from query string or body
+  // Parse scan mode and topic from query string or body
   const url = new URL(req.url);
-  const modeParam = url.searchParams.get('mode') ?? 'standard';
+  const body = await req.json().catch(() => ({}));
+  const modeParam = url.searchParams.get('mode') ?? body.mode ?? 'standard';
   const scanMode: PipelineScanMode = VALID_MODES.includes(modeParam as PipelineScanMode)
     ? (modeParam as PipelineScanMode)
     : 'standard';
+  const topic: string | undefined = body.topic?.trim() || undefined;
 
   try {
-    const result = await runPipeline(scanMode);
+    const result = await runPipeline(scanMode, undefined, topic);
 
     const sorted = result.candidates
       .filter(c => !c.rejected)
@@ -32,6 +34,7 @@ export async function POST(req: NextRequest) {
       date: now,
       status: 'completed',
       scanMode,
+      topic,
       phases: result.phases.map(p => ({
         id: p.phase,
         label: p.label,
