@@ -280,8 +280,8 @@ export async function runPipeline(
   // Rank
   const ranked = rankCandidates(filtered);
 
-  // Deep validation on top 2 (only if LLM available and we have time)
-  const validated = (isLLMAvailable() && hasTime())
+  // Deep validation on top 2 (skip for quick mode — too slow for 60s limit)
+  const validated = (isLLMAvailable() && hasTime() && mode !== 'quick')
     ? await deepValidateTop(ranked, 2)
     : ranked;
 
