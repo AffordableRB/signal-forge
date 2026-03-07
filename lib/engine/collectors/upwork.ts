@@ -41,59 +41,109 @@ export class UpworkCollector implements Collector {
   private async fetchJobSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Search Indeed for job postings related to the query
-    try {
-      const url = `https://www.indeed.com/jobs?q=${encodeURIComponent(query)}&sort=date`;
-      const html = await throttledFetchText(url, { useProxy: true });
+    // Try mobile Indeed first (simpler HTML), then fall back to desktop
+    const encodedQuery = encodeURIComponent(query);
+    const urls = [
+      `https://m.indeed.com/jobs?q=${encodedQuery}&sort=date`,
+      `https://www.indeed.com/jobs?q=${encodedQuery}&sort=date`,
+    ];
 
-      // Extract job cards
-      const jobCards = this.extractMatches(html, [
-        /<td[^>]*class="[^"]*resultContent[^"]*"[^>]*>([\s\S]*?)<\/td>/gi,
-        /<div[^>]*class="[^"]*job_seen_beacon[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-        /<h2[^>]*class="[^"]*jobTitle[^"]*"[^>]*>([\s\S]*?)<\/h2>/gi,
-      ]);
+    for (const url of urls) {
+      if (evidence.length > 0) break;
+      try {
+        const html = await throttledFetchText(url, { useProxy: true });
 
-      const snippets = this.extractMatches(html, [
-        /<div[^>]*class="[^"]*job-snippet[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-        /<span[^>]*class="[^"]*salary[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-      ]);
+        const allSnippets = this.extractJobSnippets(html);
 
-      const allSnippets = [...jobCards, ...snippets];
+        for (const snippet of allSnippets.slice(0, this.jobLimit)) {
+          const clean = this.stripHtml(snippet);
+          if (clean.length < 15 || clean.length > 600) continue;
 
-      for (const snippet of allSnippets.slice(0, this.jobLimit)) {
-        const clean = this.stripHtml(snippet);
-        if (clean.length < 15 || clean.length > 600) continue;
+          const hasSalary = /\$[\d,]+/.test(clean);
+          const signalType = classifySignal(clean);
 
-        const hasSalary = /\$[\d,]+/.test(clean);
-        const signalType = classifySignal(clean);
+          evidence.push({
+            source: 'indeed:jobs',
+            url,
+            excerpt: `Job: ${clean.slice(0, 280)}`,
+            signalType: hasSalary ? 'money' : (signalType === 'pain' ? 'pain' : 'demand'),
+            sourceTier: 1,
+            confidence: computeConfidence(clean, 0.8, 0.9),
+            timestamp: Date.now(),
+          });
+        }
 
-        evidence.push({
-          source: 'indeed:jobs',
-          url,
-          excerpt: `Job: ${clean.slice(0, 280)}`,
-          signalType: hasSalary ? 'money' : (signalType === 'pain' ? 'pain' : 'demand'),
-          sourceTier: 1,
-          confidence: computeConfidence(clean, 0.8, 0.9),
-          timestamp: Date.now(),
-        });
+        if (evidence.length > 0) {
+          evidence.push({
+            source: 'indeed:analysis',
+            url,
+            excerpt: `Found ${evidence.length} active job postings for "${query}" — companies are hiring for this, validating market demand.`,
+            signalType: 'demand',
+            sourceTier: 1,
+            confidence: 0.85,
+            timestamp: Date.now(),
+          });
+        }
+      } catch (err) {
+        console.warn(`[JobsCollector] Indeed failed (${url}):`, (err as Error).message);
       }
-
-      if (evidence.length > 0) {
-        evidence.push({
-          source: 'indeed:analysis',
-          url,
-          excerpt: `Found ${evidence.length} active job postings for "${query}" — companies are hiring for this, validating market demand.`,
-          signalType: 'demand',
-          sourceTier: 1,
-          confidence: 0.85,
-          timestamp: Date.now(),
-        });
-      }
-    } catch (err) {
-      console.warn('[JobsCollector] Indeed failed:', (err as Error).message);
     }
 
     return evidence;
+  }
+
+  private extractJobSnippets(html: string): string[] {
+    // Layer 1: Elements with data-jk attribute (Indeed job key — stable across redesigns)
+    const layer1 = this.extractMatches(html, [
+      /<[^>]+data-jk="[^"]*"[^>]*>([\s\S]*?)<\/(?:div|a|td|article)>/gi,
+    ]);
+    if (layer1.length > 0) return layer1;
+
+    // Layer 2: Broad class-based patterns (current and historical Indeed classes)
+    const layer2 = this.extractMatches(html, [
+      /<div[^>]*class="[^"]*(?:cardOutline|jobCard|job-cardstyle|resultContent|job_seen_beacon|tapItem)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      /<h2[^>]*class="[^"]*(?:jobTitle|job-title)[^"]*"[^>]*>([\s\S]*?)<\/h2>/gi,
+      /<td[^>]*class="[^"]*resultContent[^"]*"[^>]*>([\s\S]*?)<\/td>/gi,
+      /<div[^>]*class="[^"]*(?:job-snippet|jobsnippet|underShelfFooter)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      /<span[^>]*class="[^"]*(?:salary|salaryText|metadata)[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
+    ]);
+    if (layer2.length > 0) return layer2;
+
+    // Layer 3: data-testid based selectors (React-rendered Indeed)
+    const layer3 = this.extractMatches(html, [
+      /<[^>]+data-testid="[^"]*job[^"]*"[^>]*>([\s\S]*?)<\/(?:div|a|li|article)>/gi,
+    ]);
+    if (layer3.length > 0) return layer3;
+
+    // Layer 4: Fallback — <a> tags linking to job detail pages
+    const linkFallback = this.extractMatches(html, [
+      /<a[^>]*href="[^"]*(?:\/viewjob|\/rc\/clk|\/pagead\/clk|clk\?jk=)[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+      /<a[^>]*href="[^"]*\/job\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+    ]);
+    if (linkFallback.length > 0) return linkFallback;
+
+    // Layer 5: Last resort — extract <h2> tags (job titles are always in h2 on Indeed)
+    // plus nearby text blocks containing job-related keywords
+    const h2Tags = this.extractMatches(html, [
+      /<h2[^>]*>([\s\S]*?)<\/h2>/gi,
+    ]);
+    const jobKeywordBlocks = this.extractTextBlocks(html);
+
+    return [...h2Tags, ...jobKeywordBlocks];
+  }
+
+  private extractTextBlocks(html: string): string[] {
+    // Extract text segments between tags that look like job content
+    const results: string[] = [];
+    const blockPattern = />([^<]{30,500})</g;
+    let match;
+    while ((match = blockPattern.exec(html)) !== null) {
+      const text = match[1].trim();
+      if (/\b(hiring|salary|position|apply|job|experience|qualifications|requirements|full.?time|part.?time|remote|hybrid)\b/i.test(text)) {
+        results.push(text);
+      }
+    }
+    return results;
   }
 
   private extractMatches(html: string, patterns: RegExp[]): string[] {

@@ -58,8 +58,8 @@ export class PricingCollector implements Collector {
 
   private async fetchPricingSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
-    // Only run the pricing search (skip complaints search to save proxy time)
     await this.scrapePricingSearch(query, evidence);
+    await this.scrapePricingComplaints(query, evidence);
     return evidence;
   }
 
@@ -123,28 +123,69 @@ export class PricingCollector implements Collector {
   }
 
   private extractSnippets(html: string): string[] {
+    const seen = new Set<string>();
     const results: string[] = [];
-    const patterns = [
-      // Google search result snippets (various class names Google uses)
-      /<span[^>]*class="[^"]*(?:st|snippet)[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-      /<div[^>]*class="[^"]*(?:VwiC3b|IsZvec|s3v9rd)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-      /<div[^>]*class="[^"]*BNeawe[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-      // Generic longer text spans (fallback)
-      /<span[^>]*>([\s\S]{50,400}?)<\/span>/gi,
+
+    // Pricing-related keywords to filter relevant text blocks
+    const pricingKeywords = /\$\d|pric|cost|plan|tier|subscription|per\s*month|per\s*year|\/mo|\/yr|free\s*trial|enterprise|afford|expensive|cheap|budget|starter|premium|pro\b/i;
+
+    // Strategy 1: Extract text from data-attrid or data-snf containers (Google structured data)
+    const structuredPatterns = [
+      /<div[^>]*data-(?:attrid|snf|sncf|content-feature)[^>]*>([\s\S]*?)<\/div>/gi,
+      /<div[^>]*class="[^"]*(?:VwiC3b|IsZvec|s3v9rd|BNeawe|st|snippet|kb0PBd|ILfuVd|MUxGbd)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      /<span[^>]*class="[^"]*(?:st|snippet|hgKElc|ILfuVd)[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
     ];
 
-    for (const pattern of patterns) {
+    for (const pattern of structuredPatterns) {
       let match;
       while ((match = pattern.exec(html)) !== null) {
-        const clean = match[1]
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        if (clean.length > 20) results.push(clean);
+        this.addSnippetIfRelevant(match[1], pricingKeywords, seen, results);
+      }
+    }
+
+    // Strategy 2: Resilient approach — extract text blocks from any div/span/p/li
+    // that are 50-400 chars and contain pricing keywords
+    const genericPattern = /<(?:div|span|p|li|td)[^>]*>([\s\S]*?)<\/(?:div|span|p|li|td)>/gi;
+    let match;
+    while ((match = genericPattern.exec(html)) !== null) {
+      this.addSnippetIfRelevant(match[1], pricingKeywords, seen, results);
+    }
+
+    // Strategy 3: Split HTML by tags and check raw text segments
+    if (results.length === 0) {
+      const stripped = html.replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '');
+      const textBlocks = stripped.replace(/<[^>]+>/g, '\n').split('\n');
+      for (const block of textBlocks) {
+        const clean = block.replace(/\s+/g, ' ').trim();
+        if (clean.length >= 50 && clean.length <= 400 && pricingKeywords.test(clean)) {
+          if (!seen.has(clean)) {
+            seen.add(clean);
+            results.push(clean);
+          }
+        }
       }
     }
 
     return results;
+  }
+
+  private addSnippetIfRelevant(
+    raw: string,
+    pricingKeywords: RegExp,
+    seen: Set<string>,
+    results: string[],
+  ): void {
+    const clean = raw
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (clean.length >= 50 && clean.length <= 400 && pricingKeywords.test(clean)) {
+      if (!seen.has(clean)) {
+        seen.add(clean);
+        results.push(clean);
+      }
+    }
   }
 
   private extractPrices(text: string): string[] {

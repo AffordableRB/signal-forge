@@ -3,12 +3,54 @@ import { RawSignal, Evidence } from '../models/types';
 import { throttledFetchJson, hasProxyKey } from './rate-limiter';
 import { classifySignal, computeConfidence } from './classify';
 
-const TARGET_SUBREDDITS = [
+// Default business subreddits — used when no topic-specific subs are found
+const DEFAULT_SUBREDDITS = [
   'entrepreneur', 'startups', 'smallbusiness', 'SaaS',
   'realestateinvesting', 'landlord', 'propertymanagement',
   'contractors', 'plumbing', 'HVAC',
   'legaladvice', 'accounting',
 ];
+
+// Topic-to-subreddit mapping for common verticals
+const TOPIC_SUBREDDITS: Record<string, string[]> = {
+  fitness: ['fitness', 'gym', 'personaltraining', 'crossfit', 'bodybuilding', 'homegym', 'running', 'yogateachers', 'fitnessindustry'],
+  health: ['healthcare', 'healthIT', 'medicine', 'nursing', 'physicaltherapy', 'mentalhealth', 'dietetics'],
+  restaurant: ['restaurateur', 'KitchenConfidential', 'foodservice', 'restaurant', 'barowners'],
+  food: ['restaurateur', 'KitchenConfidential', 'foodservice', 'foodindustry', 'foodtrucks'],
+  construction: ['construction', 'contractors', 'electricians', 'plumbing', 'HVAC', 'HomeImprovement'],
+  dental: ['dentistry', 'dental', 'DentalProfessionals', 'orthodontics'],
+  legal: ['legaladvice', 'lawyers', 'LawFirm', 'paralegal'],
+  education: ['teachers', 'education', 'edtech', 'tutoring', 'onlinelearning', 'professors'],
+  ecommerce: ['ecommerce', 'shopify', 'FulfillmentByAmazon', 'dropship', 'Etsy'],
+  realestate: ['realestateinvesting', 'landlord', 'propertymanagement', 'RealEstate', 'realtors'],
+  cleaning: ['CleaningTips', 'CleaningService', 'smallbusiness', 'sweatystartup'],
+  beauty: ['beauty', 'HairStylist', 'Esthetics', 'NailTechnicians', 'smallbusiness'],
+  automotive: ['AutoDetailing', 'MechanicAdvice', 'AutoBody', 'mechanics', 'smallbusiness'],
+  photography: ['photography', 'WeddingPhotography', 'videography', 'smallbusiness'],
+  accounting: ['accounting', 'Bookkeeping', 'tax', 'CPA', 'smallbusiness'],
+  marketing: ['marketing', 'digitalmarketing', 'SEO', 'PPC', 'socialmedia', 'agency'],
+  pet: ['grooming', 'dogtraining', 'petcare', 'VetTech', 'smallbusiness'],
+};
+
+function getSubredditsForQueries(queries: string[]): string[] {
+  const combined = queries.join(' ').toLowerCase();
+  const matched: string[] = [];
+
+  for (const [topic, subs] of Object.entries(TOPIC_SUBREDDITS)) {
+    if (combined.includes(topic)) {
+      matched.push(...subs);
+    }
+  }
+
+  if (matched.length > 0) {
+    // Also include some general business subs for broader context
+    const generalSubs = ['entrepreneur', 'startups', 'smallbusiness'];
+    const unique = Array.from(new Set([...matched, ...generalSubs]));
+    return unique;
+  }
+
+  return DEFAULT_SUBREDDITS;
+}
 
 interface RedditPost {
   data: {
@@ -32,13 +74,17 @@ export class RedditCollector implements Collector {
   id = 'reddit';
   private resultLimit: number;
   private subDepth: number;
+  private activeSubs: string[] = DEFAULT_SUBREDDITS;
 
   constructor(resultLimit?: number, subDepth?: number) {
     this.resultLimit = resultLimit ?? 25;
-    this.subDepth = subDepth ?? 2;
+    this.subDepth = subDepth ?? 4;
   }
 
   async collect(queries: string[]): Promise<RawSignal[]> {
+    // Resolve subreddits dynamically based on query content
+    this.activeSubs = getSubredditsForQueries(queries);
+
     // Limit queries to avoid timeout — each query = 1 global + N sub searches via proxy
     const maxQueries = Math.min(queries.length, 2);
     const results = await Promise.allSettled(
@@ -86,7 +132,7 @@ export class RedditCollector implements Collector {
         if (keywordHits < Math.min(2, queryKeywords.length)) continue;
 
         const signalType = classifySignal(text);
-        const isTargetSub = TARGET_SUBREDDITS.some(s =>
+        const isTargetSub = this.activeSubs.some(s =>
           p.subreddit.toLowerCase() === s.toLowerCase()
         );
 
@@ -111,7 +157,7 @@ export class RedditCollector implements Collector {
     }
 
     // Also search specific subreddits in parallel for higher relevance
-    const topSubs = TARGET_SUBREDDITS.slice(0, this.subDepth);
+    const topSubs = this.activeSubs.slice(0, this.subDepth);
     const subQueryKeywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
 
     await Promise.allSettled(topSubs.map(async (sub) => {

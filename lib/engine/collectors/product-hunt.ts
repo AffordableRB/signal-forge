@@ -92,7 +92,7 @@ export class ProductHuntCollector implements Collector {
         headers: { 'Accept': 'application/rss+xml, text/xml, application/xml' },
       });
 
-      const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
       const items = xml.split(/<item>/i).slice(1);
 
       for (const item of items.slice(0, 30)) {
@@ -105,7 +105,8 @@ export class ProductHuntCollector implements Collector {
         const desc = this.stripHtml(descMatch?.[1] ?? '');
         const combined = `${title} ${desc}`.toLowerCase();
 
-        const relevant = keywords.some(kw => combined.includes(kw));
+        // Check if any keyword (or stem) appears in the product
+        const relevant = keywords.some(kw => combined.includes(kw) || combined.includes(kw.slice(0, -1)));
         if (!relevant) continue;
 
         evidence.push({

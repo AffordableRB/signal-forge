@@ -26,7 +26,11 @@ export class HackerNewsCollector implements Collector {
   async collect(queries: string[]): Promise<RawSignal[]> {
     const signals: RawSignal[] = [];
 
-    for (const query of queries) {
+    // HN's Algolia search works best with short, general queries.
+    // Simplify verbose queries by extracting key terms (drop forum-targeting words).
+    const hnQueries = this.simplifyQueries(queries);
+
+    for (const query of hnQueries) {
       const evidence = await this.fetchHNSignals(query);
       if (evidence.length > 0) {
         signals.push({
@@ -39,6 +43,36 @@ export class HackerNewsCollector implements Collector {
     }
 
     return signals;
+  }
+
+  // Convert verbose/Reddit-targeted queries into shorter HN-friendly search terms
+  private simplifyQueries(queries: string[]): string[] {
+    const NOISE_WORDS = new Set([
+      'reddit', 'complaints', 'reviews', 'alternatives', 'problems',
+      'challenges', 'difficulties', 'issues', 'too', 'very', 'really',
+      'looking', 'struggling', 'complaining', 'about', 'with', 'the',
+      'for', 'and', 'how', 'why', 'what', 'best', 'top', 'most',
+    ]);
+
+    const seen = new Set<string>();
+    const simplified: string[] = [];
+
+    for (const q of queries) {
+      const words = q.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !NOISE_WORDS.has(w));
+
+      // Take up to 4 key words
+      const key = words.slice(0, 4).join(' ');
+      if (key.length > 5 && !seen.has(key)) {
+        seen.add(key);
+        simplified.push(key);
+      }
+    }
+
+    // Limit to 4 queries to avoid over-fetching
+    return simplified.slice(0, 4);
   }
 
   private async fetchHNSignals(query: string): Promise<Evidence[]> {
