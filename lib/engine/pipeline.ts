@@ -139,7 +139,7 @@ export async function runPipeline(
   if (isLLMAvailable() && hasTime()) {
     // For quick/standard modes, limit LLM analysis to top candidates by keyword score
     // to stay within Vercel's 60s timeout
-    const maxLLM = mode === 'quick' ? 5 : mode === 'standard' ? 8 : candidates.length;
+    const maxLLM = mode === 'quick' ? 3 : mode === 'standard' ? 5 : candidates.length;
     if (candidates.length > maxLLM) {
       // Pre-score with keyword detectors, LLM-analyze only the top N
       const keywordScored = analyzeAll(candidates);
@@ -254,10 +254,12 @@ export async function runPipeline(
   const analysisStart = Date.now();
   emitPhase('analysis', 'running', 0, 0);
 
-  // Re-analyze after evidence enrichment (LLM if available)
-  const reanalyzed = isLLMAvailable()
+  // Re-analyze after evidence enrichment — skip LLM re-analysis for quick mode
+  // (already done once above, and quick mode has no enrichment phases)
+  const needsReanalysis = config.phases.includes('market-mapping') || config.phases.includes('deep-evidence');
+  const reanalyzed = (isLLMAvailable() && needsReanalysis && hasTime())
     ? await llmAnalyzeAll(analyzed)
-    : analyzeAll(analyzed);
+    : needsReanalysis ? analyzeAll(analyzed) : analyzed;
 
   // Enrich
   const enriched = reanalyzed.map(c => enrichCandidate(c));
