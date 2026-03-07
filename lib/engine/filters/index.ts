@@ -1,14 +1,21 @@
-import { OpportunityCandidate, SignalType } from '../models/types';
+import { OpportunityCandidate, SignalType, RiskFlag } from '../models/types';
 import { REALITY_FILTER_RULES } from '../config/defaults';
 
 export function applyFilters(candidates: OpportunityCandidate[]): OpportunityCandidate[] {
   return candidates.map(c => filterCandidate(c));
 }
 
+// Determine if the candidate has thin evidence (sparse data from few collectors)
+function isThinEvidence(candidate: OpportunityCandidate): boolean {
+  return candidate.evidence.length < 5;
+}
+
 function filterCandidate(candidate: OpportunityCandidate): OpportunityCandidate {
   const reasons: string[] = [];
+  const newRisks: RiskFlag[] = [];
+  const thin = isThinEvidence(candidate);
 
-  // Rule 1: Must have at least 2 of 3 core signal types (demand, pain, money)
+  // Rule 1: Signal type coverage
   const signalTypes = new Set(candidate.evidence.map(e => e.signalType));
   const presentTypes = REALITY_FILTER_RULES.requireSignalTypes.filter(
     t => signalTypes.has(t as SignalType)
@@ -17,12 +24,21 @@ function filterCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
     const missingTypes = REALITY_FILTER_RULES.requireSignalTypes.filter(
       t => !signalTypes.has(t as SignalType)
     );
-    reasons.push(`Missing signal types: ${missingTypes.join(', ')} (need at least 2 of 3)`);
+    if (thin) {
+      // Thin evidence: downgrade to risk instead of hard rejection
+      newRisks.push({ id: 'thin-signal-types', severity: 'medium', description: `Thin evidence — missing signal types: ${missingTypes.join(', ')}` });
+    } else {
+      reasons.push(`Missing signal types: ${missingTypes.join(', ')} (need at least 2 of 3)`);
+    }
   }
 
   // Rule 2: Must have a clear buyer
   if (REALITY_FILTER_RULES.requireBuyer && !candidate.targetBuyer) {
-    reasons.push('No clear target buyer identified');
+    if (thin) {
+      newRisks.push({ id: 'thin-no-buyer', severity: 'medium', description: 'No clear target buyer identified (limited data)' });
+    } else {
+      reasons.push('No clear target buyer identified');
+    }
   }
 
   // Rule 3: Retention score must be >= 3 (unless explicitly one-time)
@@ -31,7 +47,11 @@ function filterCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
     const isOneTime = candidate.jobToBeDone.toLowerCase().includes('one-time') ||
       candidate.evidence.some(e => e.excerpt.toLowerCase().includes('one-time'));
     if (!isOneTime) {
-      reasons.push(`Low retention potential (workflowAnchor: ${retentionScore}/10, minimum: ${REALITY_FILTER_RULES.minRetention})`);
+      if (thin) {
+        newRisks.push({ id: 'thin-low-retention', severity: 'low', description: `Low retention signal (workflowAnchor: ${retentionScore}/10, limited data)` });
+      } else {
+        reasons.push(`Low retention potential (workflowAnchor: ${retentionScore}/10, minimum: ${REALITY_FILTER_RULES.minRetention})`);
+      }
     }
   }
 
@@ -42,6 +62,7 @@ function filterCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
     const painScore = candidate.detectorResults.find(r => r.detectorId === 'painIntensity')?.score ?? 0;
     const hasWedge = demandScore >= 7 && painScore >= 7;
     if (!hasWedge) {
+      // R4 always hard-rejects regardless of evidence depth
       reasons.push(`Too hard to build (easeToBuild: ${easeScore}/10) without clear competitive wedge`);
     }
   }
@@ -50,5 +71,6 @@ function filterCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
     ...candidate,
     rejected: reasons.length > 0,
     rejectionReasons: reasons,
+    riskFlags: [...(candidate.riskFlags ?? []), ...newRisks],
   };
 }
