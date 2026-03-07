@@ -7,6 +7,8 @@ import { ReviewCollector } from './reviews';
 import { UpworkCollector } from './upwork';
 import { ProductHuntCollector } from './product-hunt';
 import { PricingCollector } from './pricing';
+import { StackExchangeCollector } from './stackexchange';
+import { GitHubCollector } from './github';
 import { deduplicateEvidence } from './dedup';
 import { RawSignal } from '../models/types';
 
@@ -34,6 +36,8 @@ function createFastCollectors(): Collector[] {
     new HackerNewsCollector(),
     new SearchIntentCollector(),
     new GoogleTrendsCollector(),
+    new StackExchangeCollector(),
+    new GitHubCollector(),
   ];
 }
 
@@ -113,12 +117,14 @@ export function createCollectorById(id: string, opts: CollectionOptions = {}): C
     case 'jobs': return new UpworkCollector(opts.jobResultLimit);
     case 'product-hunt': return new ProductHuntCollector();
     case 'pricing': return new PricingCollector(opts.pricingQueryCount);
+    case 'stackexchange': return new StackExchangeCollector();
+    case 'github': return new GitHubCollector();
     default: return null;
   }
 }
 
 export const ALL_COLLECTOR_IDS = [
-  'hackernews', 'search-intent', 'google-trends',
+  'hackernews', 'search-intent', 'google-trends', 'stackexchange', 'github',
   'reddit', 'reviews', 'jobs', 'product-hunt', 'pricing',
 ];
 

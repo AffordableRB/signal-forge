@@ -22,7 +22,7 @@ const SEED_QUERIES = [
 ];
 
 const ALL_COLLECTORS = [
-  'hackernews', 'search-intent', 'google-trends',
+  'hackernews', 'search-intent', 'google-trends', 'stackexchange', 'github',
   'reddit', 'reviews', 'jobs', 'product-hunt', 'pricing',
 ];
 
