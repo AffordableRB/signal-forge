@@ -145,7 +145,7 @@ export async function runPipeline(
   if (isLLMAvailable() && hasTime()) {
     // For quick/standard modes, limit LLM analysis to top candidates by keyword score
     // to stay within Vercel's 60s timeout
-    const maxLLM = mode === 'quick' ? 3 : mode === 'standard' ? 5 : candidates.length;
+    const maxLLM = mode === 'quick' ? 4 : mode === 'standard' ? 5 : mode === 'deep' ? 6 : candidates.length;
     if (candidates.length > maxLLM) {
       // Pre-score with keyword detectors, LLM-analyze only the top N
       const keywordScored = analyzeAll(candidates);
@@ -286,8 +286,8 @@ export async function runPipeline(
   // Rank
   const ranked = rankCandidates(filtered);
 
-  // Deep validation on top 2 (skip for quick mode — too slow for 60s limit)
-  const validated = (isLLMAvailable() && hasTime() && mode !== 'quick')
+  // Deep validation on top 2 (only for thorough mode — too slow for 60s serverless limit)
+  const validated = (isLLMAvailable() && hasTime() && mode === 'thorough')
     ? await deepValidateTop(ranked, 2)
     : ranked;
 
