@@ -6,17 +6,23 @@ import { OpportunityCandidate, DetectorResult } from '../models/types';
 import { callClaude, isLLMAvailable } from './llm-client';
 import { analyzeCandidate as keywordAnalyze } from './index';
 
-const SYSTEM_PROMPT = `You are an expert business analyst evaluating a startup opportunity.
+const SYSTEM_PROMPT = `You are a ruthlessly honest startup analyst. Your job is to evaluate whether a NEW entrant could succeed in this market. You are scoring the OPPORTUNITY FOR A NEW STARTUP, not the market itself.
 
-You will receive evidence (Reddit posts, reviews, job listings, pricing data, competitor info) about a potential business opportunity. Your job is to score it across 12 dimensions, each 0-10.
+CRITICAL DISTINCTION:
+- High demand in a saturated market is a TERRIBLE opportunity (score competitionWeakness 1-3).
+- High demand with weak/absent competitors is a GREAT opportunity (score competitionWeakness 7-10).
+- "Lots of GitHub repos" or "many existing tools" = strong competition = LOW competitionWeakness.
+- A market where Salesforce, HubSpot, or other well-funded players dominate gets competitionWeakness 1-2.
 
 SCORING RULES:
-- Base scores on EVIDENCE, not assumptions. If there's no evidence for a dimension, score 3-5 (uncertain), not 0.
-- A score of 8-10 requires strong, multi-source evidence.
-- A score of 0-2 requires strong evidence that the dimension is weak.
-- Be skeptical. Hype is not demand. Complaints are not market gaps. One Reddit post is not validation.
-- Consider context: "this tool sucks" in a review is a competition weakness signal. "There are dozens of these" is a saturation signal.
-- Understand negation: "not expensive" means affordable. "No good solution exists" means blue ocean.
+- Base scores on EVIDENCE, not assumptions. If there's no evidence for a dimension, score 3 (uncertain), not 5.
+- A score of 8-10 requires strong, multi-source evidence. Be stingy with high scores.
+- A score of 0-2 means strong evidence against. Use these scores freely for genuinely bad dimensions.
+- Be BRUTALLY skeptical. Most opportunities are mediocre. Score them as such.
+- "Todo app" or "CRM" or "email marketing" = hyper-saturated = competitionWeakness 1-2, easeToBuild should not compensate.
+- Demand without a defensible wedge is worthless. Score abilityToPay based on what a NEW player could charge, not what incumbents charge.
+- If you can name 3+ well-known competitors, competitionWeakness is at most 4.
+- If you can name 5+ competitors, competitionWeakness is at most 2.
 
 OUTPUT FORMAT:
 Return ONLY a JSON object with this exact structure (no markdown, no explanation outside JSON):

@@ -25,10 +25,34 @@ function calculateScores(candidate: OpportunityCandidate): OpportunityScores {
     }
   }
 
-  const final = totalWeight > 0
-    ? Math.round((weightedSum / totalWeight) * 100) / 100
+  let base = totalWeight > 0
+    ? weightedSum / totalWeight
     : 0;
 
+  // ─── Competition gate ─────────────────────────────────────────────
+  // A saturated market should CAP the score, not just reduce it slightly.
+  // If competitionWeakness is low, it means strong competitors exist —
+  // even high demand can't save a crowded market for a new entrant.
+  const compScore = breakdown['competitionWeakness'] ?? 5;
+  if (compScore <= 2) {
+    // Hyper-saturated (CRM, email marketing, todo apps)
+    // Cap at 4.0 regardless of other signals
+    base = Math.min(base, 4.0);
+  } else if (compScore <= 4) {
+    // Competitive but not impossible
+    // Cap at 6.0
+    base = Math.min(base, 6.0);
+  }
+  // compScore >= 5: no cap — genuine gaps exist
+
+  // ─── Pain gate ────────────────────────────────────────────────────
+  // Without real pain, demand is just curiosity, not a business
+  const painScore = breakdown['painIntensity'] ?? 5;
+  if (painScore <= 2) {
+    base = Math.min(base, 5.0);
+  }
+
+  const final = Math.round(base * 100) / 100;
   return { final, breakdown };
 }
 
