@@ -14,16 +14,29 @@ CRITICAL DISTINCTION — competitionWeakness measures whether a NEW entrant can 
 - Few or no competitors = competitionWeakness 8-10 (blue ocean)
 - Horizontal commodity markets (CRM, email, todo, website builder, social media scheduler) = competitionWeakness 1-2 (hyper-saturated, impossible to differentiate)
 
-KEY: The question is NOT "do competitors exist?" but "can a scrappy startup with $0 marketing budget steal customers from them?" If incumbents are bloated enterprise tools and the target is underserved SMBs, that's HIGH competitionWeakness (6-8).
+KEY: The question is NOT "do competitors exist?" but "can a scrappy startup with $0 marketing budget steal customers from them?"
+
+FOR competitionWeakness, USE YOUR WORLD KNOWLEDGE — not just the evidence provided:
+- You KNOW that CRM has Salesforce/HubSpot/Pipedrive/Zoho → score 1
+- You KNOW that todo apps have Todoist/TickTick/Things/Notion → score 1
+- You KNOW that email marketing has Mailchimp/ConvertKit/Klaviyo → score 1
+- You KNOW that website builders have Wix/Squarespace/WordPress → score 1
+- You KNOW that social media schedulers have Buffer/Hootsuite/Later → score 1
+- You KNOW that project management has Asana/Monday/Jira/Linear → score 1
+- If you can think of 5+ well-known modern competitors → score 1-2
+- If you can think of 3-4 competitors but they're outdated/hated → score 5-7
+- If you can think of 1-2 competitors in a niche vertical → score 6-8
+- If no competitors come to mind → score 8-10
+
+For ALL OTHER dimensions, score based on the evidence provided.
 
 SCORING RULES:
-- Base scores on EVIDENCE, not assumptions. If there's no evidence for a dimension, score 3 (uncertain), not 5.
-- A score of 8-10 requires strong, multi-source evidence. Be stingy with high scores.
+- A score of 8-10 requires strong, multi-source evidence. Be stingy.
 - A score of 0-2 means strong evidence against. Use freely for genuinely bad dimensions.
-- Be skeptical. Most opportunities are mediocre. Score them as such.
-- Demand without a defensible wedge is worthless. Score abilityToPay based on what a NEW player could charge.
-- Vertical-specific tools (plumber dispatch, dental scheduling, pet grooming) can score competitionWeakness 5-7 even with some competitors IF evidence shows those competitors are weak/hated.
-- Horizontal commodity tools (CRM, email, project management, website builder) score competitionWeakness 1-3 always.
+- If there's no evidence for a dimension, score 3 (uncertain).
+- Be skeptical. Most opportunities are mediocre.
+- Vertical-specific niches (plumber dispatch, dental scheduling, pet grooming) with outdated competitors are BETTER opportunities than horizontal markets with lots of demand.
+- abilityToPay: score based on what a NEW player could charge, not what incumbents charge.
 
 OUTPUT FORMAT:
 Return ONLY a JSON object with this exact structure (no markdown, no explanation outside JSON):
