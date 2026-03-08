@@ -38,12 +38,13 @@ function calculateScores(candidate: OpportunityCandidate): OpportunityScores {
     // Hyper-saturated (CRM, email marketing, todo apps)
     // Cap at 4.0 regardless of other signals
     base = Math.min(base, 4.0);
-  } else if (compScore <= 4) {
-    // Competitive but not impossible
-    // Cap at 6.0
-    base = Math.min(base, 6.0);
+  } else if (compScore <= 3) {
+    // Very competitive — hard for a new entrant
+    // Cap at 5.5
+    base = Math.min(base, 5.5);
   }
-  // compScore >= 5: no cap — genuine gaps exist
+  // compScore >= 4: no hard cap — vertical niches with some competitors
+  // can still be good opportunities if competitors are weak
 
   // ─── Pain gate ────────────────────────────────────────────────────
   // Without real pain, demand is just curiosity, not a business
