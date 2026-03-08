@@ -36,7 +36,7 @@ interface RawSignal {
 // ─── Mode config ────────────────────────────────────────────────────────
 
 const SCAN_MODE_INFO: Record<ScanMode, { label: string; desc: string; phases: number }> = {
-  quick:    { label: 'Quick',    desc: '~20s · 6 queries, AI analysis',                          phases: 2 },
+  quick:    { label: 'Quick',    desc: '~20s · 4 queries, AI analysis',                          phases: 2 },
   standard: { label: 'Standard', desc: '~40s · 6 queries + market mapping',                    phases: 3 },
   deep:     { label: 'Deep',     desc: '~55s · 8 queries, all 5 phases',                       phases: 5 },
   thorough: { label: 'Thorough', desc: 'Multi-round · Every collector, refinement, max depth',  phases: 6 },

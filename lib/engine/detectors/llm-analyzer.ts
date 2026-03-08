@@ -185,17 +185,15 @@ export async function llmAnalyzeCandidate(candidate: OpportunityCandidate): Prom
   };
 }
 
-// Analyze all candidates — with concurrency limit to avoid rate limits
+// Analyze all candidates — parallel with concurrency limit
 export async function llmAnalyzeAll(candidates: OpportunityCandidate[]): Promise<OpportunityCandidate[]> {
   if (!isLLMAvailable()) {
     return candidates.map(c => keywordAnalyze(c));
   }
 
-  // Process sequentially to avoid rate limits (each call is ~2s)
-  const results: OpportunityCandidate[] = [];
-  for (const candidate of candidates) {
-    const analyzed = await llmAnalyzeCandidate(candidate);
-    results.push(analyzed);
-  }
+  // Run up to 3 LLM calls in parallel to reduce wall-clock time
+  const results = await Promise.all(
+    candidates.map(candidate => llmAnalyzeCandidate(candidate))
+  );
   return results;
 }
