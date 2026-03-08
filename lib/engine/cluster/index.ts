@@ -57,15 +57,20 @@ const QUERY_NOISE = new Set([
 ]);
 
 function extractJobToBeDone(query: string): string {
-  // Remove URL fragments like site:reddit.com
-  const cleaned = normalizePhrase(query)
-    .replace(/site\s*:\s*\S+/g, '')
+  // Remove URL fragments like site:reddit.com (before and after normalization)
+  const cleaned = query
+    .replace(/site\s*:\s*\S+/gi, '')
+    .replace(/sitereddit\S*/gi, '')
+    .replace(/\bhttps?:\/\/\S+/gi, '')
+    .trim();
+  const norm = normalizePhrase(cleaned)
+    .replace(/siteredditcom\S*/g, '')
     .replace(/^(how to |best way to |need help with |looking for |reddit )/g, '')
     .replace(/"([^"]+)"/g, '$1')
     .replace(/ or /gi, ' ');
 
   // Split into words, keep only meaningful ones
-  const words = cleaned.split(' ').filter(w => w.length > 2 && !STOP_WORDS.has(w) && !QUERY_NOISE.has(w));
+  const words = norm.split(' ').filter(w => w.length > 2 && !STOP_WORDS.has(w) && !QUERY_NOISE.has(w));
 
   // Take up to 5 meaningful words
   const result = words.slice(0, 5).join(' ').trim();
