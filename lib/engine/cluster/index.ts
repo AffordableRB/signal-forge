@@ -44,26 +44,72 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
   return union.size === 0 ? 0 : intersection.size / union.size;
 }
 
+// Noise words that appear in search queries but aren't part of the actual opportunity
+const QUERY_NOISE = new Set([
+  'software', 'tool', 'app', 'solution', 'platform', 'system', 'service',
+  'reddit', 'problems', 'complaints', 'reviews', 'alternatives', 'pricing',
+  'competitors', 'challenges', 'difficulties', 'hiring', 'industry', 'trends',
+  'market', 'size', 'regulatory', 'compliance', 'automation', 'management',
+  'nightmare', 'expensive', 'frustrations', 'manual', 'process', 'issues',
+  'work', 'costs', 'burden', 'too', 'high', 'low', 'bad', 'worst',
+  'looking', 'need', 'want', 'help', 'best', 'top', 'cheap', 'free',
+  '2024', '2025', '2026', 'small', 'business', 'site', 'com',
+]);
+
 function extractJobToBeDone(query: string): string {
-  const normalized = normalizePhrase(query);
-
-  // Strip noise words that come from template queries
-  const cleaned = normalized
-    .replace(/^(how to |best way to |need help with |looking for )/, '')
-    .replace(/ (software|tool|app|solution|platform|reddit|problems|complaints|reviews|alternatives|pricing|competitors|challenges|difficulties|hiring|industry|trends|market|size|regulatory|compliance|invoicing|billing|payment|management|automation|small business|2024|2025)$/g, '')
-    .replace(/ (software|problems|reddit|complaints|reviews|alternatives|pricing|competitors|challenges|difficulties) /g, ' ')
+  // Remove URL fragments like site:reddit.com
+  const cleaned = normalizePhrase(query)
+    .replace(/site\s*:\s*\S+/g, '')
+    .replace(/^(how to |best way to |need help with |looking for |reddit )/g, '')
     .replace(/"([^"]+)"/g, '$1')
-    .replace(/ or /gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/ or /gi, ' ');
 
-  // If everything was stripped, fall back to first meaningful words
-  if (cleaned.length < 5) {
-    const words = normalized.split(' ').filter(w => !STOP_WORDS.has(w)).slice(0, 4);
-    return words.join(' ') || normalized;
+  // Split into words, keep only meaningful ones
+  const words = cleaned.split(' ').filter(w => w.length > 2 && !STOP_WORDS.has(w) && !QUERY_NOISE.has(w));
+
+  // Take up to 5 meaningful words
+  const result = words.slice(0, 5).join(' ').trim();
+
+  if (result.length < 4) {
+    // Fallback: take first 4 non-stop words from original
+    const fallback = normalizePhrase(query).split(' ').filter(w => !STOP_WORDS.has(w)).slice(0, 4);
+    return fallback.join(' ') || normalizePhrase(query);
   }
 
-  return cleaned;
+  return result;
+}
+
+// Try to derive a better opportunity name from evidence excerpts
+function refineJobName(name: string, evidence: Evidence[]): string {
+  if (evidence.length < 2) return name;
+
+  // Count domain-specific nouns in evidence excerpts
+  const wordFreq = new Map<string, number>();
+  for (const e of evidence.slice(0, 20)) {
+    const words = normalizePhrase(e.excerpt || '')
+      .split(' ')
+      .filter(w => w.length > 3 && !STOP_WORDS.has(w) && !QUERY_NOISE.has(w));
+    for (const w of words) {
+      wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
+    }
+  }
+
+  // Find the most frequent domain words that overlap with the current name
+  const nameWords = new Set(name.split(' '));
+  const topWords = Array.from(wordFreq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(e => e[0]);
+
+  // If we have strong evidence words that overlap with the name, keep it
+  const hasOverlap = topWords.some(w => nameWords.has(w));
+  if (hasOverlap) return name;
+
+  // Otherwise, try to build a better name from top evidence words + name words
+  const combined = Array.from(nameWords).filter(w => w.length > 3);
+  if (combined.length >= 2) return combined.slice(0, 4).join(' ');
+
+  return name;
 }
 
 function inferVertical(query: string): string {
@@ -190,10 +236,13 @@ function groupByMultiDimension(signals: RawSignal[]): SignalGroup[] {
 }
 
 function candidateFromGroup(group: SignalGroup): OpportunityCandidate {
+  // Refine the job name using evidence context
+  const refinedName = refineJobName(group.jobToBeDone, group.evidence);
+
   return {
     id: uuid(),
     vertical: group.vertical,
-    jobToBeDone: group.jobToBeDone,
+    jobToBeDone: refinedName,
     targetBuyer: group.targetBuyer,
     triggerMoment: group.triggerMoment,
     evidence: group.evidence,
