@@ -34,11 +34,6 @@ export class PricingCollector implements Collector {
   }
 
   async collect(queries: string[]): Promise<RawSignal[]> {
-    if (!hasProxyKey()) {
-      console.warn('[PricingCollector] Skipped — set SCRAPER_API_KEY to enable');
-      return [];
-    }
-
     const signals: RawSignal[] = [];
 
     for (const query of queries.slice(0, this.queryCount)) {
@@ -58,8 +53,21 @@ export class PricingCollector implements Collector {
 
   private async fetchPricingSignals(query: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
-    await this.scrapePricingSearch(query, evidence);
-    await this.scrapePricingComplaints(query, evidence);
+
+    if (hasProxyKey()) {
+      // Proxy available: run both proxy-based Google search and DDG search
+      await Promise.all([
+        this.scrapePricingSearch(query, evidence),
+        this.scrapePricingComplaints(query, evidence),
+        this.scrapeDdgPricingSearch(query, evidence),
+        this.scrapeDdgPricingComplaints(query, evidence),
+      ]);
+    } else {
+      // No proxy: use DDG search only (no API key needed)
+      await this.scrapeDdgPricingSearch(query, evidence);
+      await this.scrapeDdgPricingComplaints(query, evidence);
+    }
+
     return evidence;
   }
 
@@ -186,6 +194,107 @@ export class PricingCollector implements Collector {
         results.push(clean);
       }
     }
+  }
+
+  // --- DuckDuckGo-based pricing search (no proxy needed) ---
+
+  private async scrapeDdgPricingSearch(query: string, evidence: Evidence[]): Promise<void> {
+    try {
+      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query + ' software pricing')}`;
+      const html = await throttledFetchText(searchUrl, {
+        headers: {
+          'Accept': 'text/html',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+
+      const snippets = this.extractDdgSnippets(html);
+
+      for (const snippet of snippets.slice(0, 8)) {
+        const prices = this.extractPrices(snippet);
+        const hasPriceHike = PRICE_HIKE_PATTERNS.some(p => p.test(snippet));
+
+        if (prices.length === 0 && !hasPriceHike) continue;
+
+        const priceRange = prices.length > 0
+          ? `Pricing found: ${prices.slice(0, 3).join(', ')}`
+          : '';
+        const hikeNote = hasPriceHike ? ' Price increase signals detected.' : '';
+
+        evidence.push({
+          source: 'pricing:ddg-search',
+          url: searchUrl,
+          excerpt: `${priceRange}${hikeNote} Context: ${snippet.slice(0, 200)}`,
+          signalType: hasPriceHike ? 'competition' : 'money',
+          sourceTier: 2,
+          confidence: computeConfidence(snippet, 0.65, 0.85),
+          timestamp: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.warn('[PricingCollector] DDG search failed:', (err as Error).message);
+    }
+  }
+
+  private async scrapeDdgPricingComplaints(query: string, evidence: Evidence[]): Promise<void> {
+    try {
+      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query + ' too expensive alternatives')}`;
+      const html = await throttledFetchText(searchUrl, {
+        headers: {
+          'Accept': 'text/html',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+
+      const snippets = this.extractDdgSnippets(html);
+
+      for (const snippet of snippets.slice(0, 5)) {
+        const isRelevant = /expensive|overpriced|costly|cheaper|alternative|afford/i.test(snippet);
+        if (!isRelevant) continue;
+
+        evidence.push({
+          source: 'pricing:ddg-complaints',
+          url: searchUrl,
+          excerpt: `Pricing complaint signal: ${snippet.slice(0, 250)}`,
+          signalType: 'money',
+          sourceTier: 2,
+          confidence: computeConfidence(snippet, 0.55, 0.75),
+          timestamp: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.warn('[PricingCollector] DDG complaints search failed:', (err as Error).message);
+    }
+  }
+
+  /** Extract text snippets from DDG HTML results (class="result__body" blocks). */
+  private extractDdgSnippets(html: string): string[] {
+    const snippets: string[] = [];
+    const resultBlocks = html.split(/class="result__body"/i).slice(1, 15);
+
+    for (const block of resultBlocks) {
+      const titleMatch = block.match(/class="result__a"[^>]*>([\s\S]*?)<\/a>/i);
+      const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/(?:td|div|span)/i);
+
+      const title = this.stripHtml(titleMatch?.[1] ?? '').trim();
+      const snippet = this.stripHtml(snippetMatch?.[1] ?? '').trim();
+
+      const combined = `${title} ${snippet}`;
+      if (combined.length >= 20) {
+        snippets.push(combined);
+      }
+    }
+
+    return snippets;
+  }
+
+  private stripHtml(html: string): string {
+    return html
+      .replace(/<b>/gi, '').replace(/<\/b>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x27;/g, "'")
+      .replace(/\s+/g, ' ').trim();
   }
 
   private extractPrices(text: string): string[] {

@@ -34,6 +34,21 @@ export class GoogleTrendsCollector implements Collector {
     const evidence: Evidence[] = [];
     const queryKeywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
 
+    // Run autocomplete and daily trends in parallel for reliability
+    await Promise.allSettled([
+      this.fetchAutocompleteTrends(query, queryKeywords, seen, evidence),
+      this.fetchDailyTrends(queryKeywords, seen, evidence),
+    ]);
+
+    return evidence;
+  }
+
+  private async fetchAutocompleteTrends(
+    query: string,
+    queryKeywords: string[],
+    seen: Set<string>,
+    evidence: Evidence[],
+  ): Promise<void> {
     // Full query lookup
     try {
       const url = `https://trends.google.com/trends/api/autocomplete/${encodeURIComponent(query)}?hl=en-US`;
@@ -70,8 +85,64 @@ export class GoogleTrendsCollector implements Collector {
     } catch {
       // Non-fatal
     }
+  }
 
-    return evidence;
+  private async fetchDailyTrends(
+    queryKeywords: string[],
+    seen: Set<string>,
+    evidence: Evidence[],
+  ): Promise<void> {
+    try {
+      // Google Trends daily RSS — more reliable than the autocomplete API
+      const rssUrl = 'https://trends.google.com/trends/trendingsearches/daily/rss?geo=US';
+      const xml = await throttledFetchText(rssUrl);
+
+      // Extract <title> and <ht:approx_traffic> from RSS items
+      const items = xml.split('<item>').slice(1, 21); // Top 20 trends
+
+      for (const item of items) {
+        const titleMatch = item.match(/<title>([^<]+)<\/title>/);
+        const trafficMatch = item.match(/<ht:approx_traffic>([^<]+)<\/ht:approx_traffic>/);
+        const newsMatch = item.match(/<ht:news_item_title>([^<]+)<\/ht:news_item_title>/);
+
+        if (!titleMatch) continue;
+
+        const title = titleMatch[1].trim();
+        const titleLower = title.toLowerCase();
+        const traffic = trafficMatch?.[1] ?? '';
+        const newsTitle = newsMatch?.[1] ?? '';
+
+        if (seen.has(titleLower)) continue;
+
+        // Check relevance: trend must relate to query keywords
+        const combined = `${titleLower} ${newsTitle.toLowerCase()}`;
+        const domainGeneric = new Set(['software', 'tool', 'app', 'platform', 'service', 'online', 'free', 'best']);
+        const domainKeywords = queryKeywords.filter(kw => !domainGeneric.has(kw));
+        const hasRelevance = domainKeywords.some(kw => combined.includes(kw));
+        if (!hasRelevance) continue;
+
+        seen.add(titleLower);
+
+        // Parse traffic number for confidence scaling
+        const trafficNum = parseInt(traffic.replace(/[^0-9]/g, ''), 10) || 0;
+        let confMin = 0.4;
+        let confMax = 0.6;
+        if (trafficNum > 100000) { confMin = 0.55; confMax = 0.75; }
+        if (trafficNum > 500000) { confMin = 0.65; confMax = 0.8; }
+
+        evidence.push({
+          source: 'google:daily-trends',
+          url: `https://trends.google.com/trends/explore?q=${encodeURIComponent(title)}&geo=US`,
+          excerpt: `Daily trending: "${title}" (${traffic} searches). ${newsTitle ? `Related: ${newsTitle.slice(0, 150)}` : ''}`.trim(),
+          signalType: 'demand',
+          sourceTier: 2,
+          confidence: computeConfidence(title, confMin, confMax),
+          timestamp: Date.now(),
+        });
+      }
+    } catch {
+      // RSS feed may be blocked; non-fatal
+    }
   }
 
   private addIfRelevant(

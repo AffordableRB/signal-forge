@@ -23,7 +23,7 @@ const SEED_QUERIES = [
 
 const ALL_COLLECTORS = [
   'hackernews', 'search-intent', 'google-trends', 'stackexchange', 'github',
-  'reddit', 'reviews', 'jobs', 'product-hunt', 'pricing',
+  'reddit', 'reviews', 'jobs', 'product-hunt', 'pricing', 'duckduckgo',
 ];
 
 interface RawSignal {
@@ -116,7 +116,7 @@ function buildRefinementSteps(topJobs: string[], round: string): ThoroughStep[] 
 export default function Dashboard() {
   const [runs, setRuns] = useState<RunRecord[]>(() => {
     if (typeof window === 'undefined') return [];
-    const stored = sessionStorage.getItem('signalforge_runs');
+    const stored = localStorage.getItem('signalforge_runs');
     return stored ? JSON.parse(stored) : [];
   });
   const [launching, setLaunching] = useState(false);
@@ -152,7 +152,7 @@ export default function Dashboard() {
 
   function persistRuns(updated: RunRecord[]) {
     setRuns(updated);
-    sessionStorage.setItem('signalforge_runs', JSON.stringify(updated));
+    localStorage.setItem('signalforge_runs', JSON.stringify(updated));
   }
 
   // ─── Standard scan (quick/standard/deep) ──────────────────────────
@@ -173,7 +173,7 @@ export default function Dashboard() {
       }
       const run: RunRecord = await res.json();
 
-      sessionStorage.setItem(`signalforge_run_${run.id}`, JSON.stringify(run));
+      localStorage.setItem(`signalforge_run_${run.id}`, JSON.stringify(run));
       persistRuns([run, ...runs]);
 
       if (run.status === 'completed') {
@@ -441,7 +441,7 @@ export default function Dashboard() {
         queriesUsed: queries,
       };
 
-      sessionStorage.setItem(`signalforge_run_${runId}`, JSON.stringify(run));
+      localStorage.setItem(`signalforge_run_${runId}`, JSON.stringify(run));
       persistRuns([run, ...runs]);
       window.location.href = `/runs/${runId}`;
 

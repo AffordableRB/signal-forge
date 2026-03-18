@@ -53,6 +53,25 @@ function calculateScores(candidate: OpportunityCandidate): OpportunityScores {
     base = Math.min(base, 5.0);
   }
 
+  // ─── Unit economics gate ────────────────────────────────────────
+  // If the business model math doesn't work, cap the score
+  const econScore = breakdown['unitEconomics'] ?? 5;
+  if (econScore <= 2) {
+    // Fundamentally broken unit economics (LTV < CAC)
+    base = Math.min(base, 4.5);
+  } else if (econScore <= 3) {
+    // Marginal unit economics — risky
+    base = Math.min(base, 5.5);
+  }
+
+  // ─── Defensibility penalty ──────────────────────────────────────
+  // Easy-to-copy businesses with no moat get penalized
+  const defenseScore = breakdown['defensibility'] ?? 5;
+  if (defenseScore <= 2 && compScore >= 5) {
+    // No moat AND competition exists — vulnerable
+    base = Math.min(base, 5.0);
+  }
+
   const final = Math.round(base * 100) / 100;
   return { final, breakdown };
 }

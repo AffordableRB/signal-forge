@@ -16,7 +16,10 @@ const RADAR_DETECTORS = [
   { id: 'painIntensity', label: 'Pain' },
   { id: 'abilityToPay', label: 'Pay' },
   { id: 'competitionWeakness', label: 'Comp Weakness' },
+  { id: 'unitEconomics', label: 'Unit Econ' },
+  { id: 'defensibility', label: 'Defensibility' },
   { id: 'distributionAccess', label: 'Distribution' },
+  { id: 'founderFit', label: 'Founder Fit' },
   { id: 'workflowAnchor', label: 'Workflow' },
   { id: 'marketTiming', label: 'Timing' },
 ];

@@ -9,6 +9,7 @@ import { ProductHuntCollector } from './product-hunt';
 import { PricingCollector } from './pricing';
 import { StackExchangeCollector } from './stackexchange';
 import { GitHubCollector } from './github';
+import { DuckDuckGoCollector } from './duckduckgo';
 import { deduplicateEvidence } from './dedup';
 import { RawSignal } from '../models/types';
 
@@ -38,6 +39,7 @@ function createFastCollectors(): Collector[] {
     new GoogleTrendsCollector(),
     new StackExchangeCollector(),
     new GitHubCollector(),
+    new DuckDuckGoCollector(),
   ];
 }
 
@@ -119,12 +121,13 @@ export function createCollectorById(id: string, opts: CollectionOptions = {}): C
     case 'pricing': return new PricingCollector(opts.pricingQueryCount);
     case 'stackexchange': return new StackExchangeCollector();
     case 'github': return new GitHubCollector();
+    case 'duckduckgo': return new DuckDuckGoCollector();
     default: return null;
   }
 }
 
 export const ALL_COLLECTOR_IDS = [
-  'hackernews', 'search-intent', 'google-trends', 'stackexchange', 'github',
+  'hackernews', 'search-intent', 'google-trends', 'stackexchange', 'github', 'duckduckgo',
   'reddit', 'reviews', 'jobs', 'product-hunt', 'pricing',
 ];
 

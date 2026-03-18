@@ -53,6 +53,9 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
   "switchingFriction": { "score": <0-10>, "reasoning": "<assess how easy it is to adopt — higher = easier>" },
   "aiAdvantage": { "score": <0-10>, "reasoning": "<assess whether AI provides genuine advantage>" },
   "marketExpansion": { "score": <0-10>, "reasoning": "<assess multi-market potential>" },
+  "unitEconomics": { "score": <0-10>, "reasoning": "<estimate CAC vs LTV — what would it cost to acquire a customer vs their lifetime value? Consider distribution channels, pricing, and churn. Score 7+ only if LTV:CAC > 3x is plausible>" },
+  "founderFit": { "score": <0-10>, "reasoning": "<can a solo founder or small team win this? Penalize: regulated verticals needing credentials, enterprise sales cycles, marketplace chicken-and-egg, deep domain expertise required. Reward: self-serve buyers, standard SaaS tech, accessible communities>" },
+  "defensibility": { "score": <0-10>, "reasoning": "<what moat could this business build? Score based on: network effects, data advantages, switching costs, regulatory barriers, vertical specialization. Score 3 or below if it's easily copyable with no lock-in. Most simple SaaS tools score 2-4 here>" },
   "overallAssessment": "<2-3 sentence summary of the opportunity quality>",
   "redFlags": ["<list any concerns>"],
   "keyInsight": "<the single most important finding from the evidence>"
@@ -119,6 +122,9 @@ interface LLMAnalysisResult {
   switchingFriction: LLMDetectorScore;
   aiAdvantage: LLMDetectorScore;
   marketExpansion: LLMDetectorScore;
+  unitEconomics: LLMDetectorScore;
+  founderFit: LLMDetectorScore;
+  defensibility: LLMDetectorScore;
   overallAssessment: string;
   redFlags: string[];
   keyInsight: string;
@@ -138,6 +144,7 @@ function parseLLMResponse(raw: string): LLMAnalysisResult | null {
       'demand', 'painIntensity', 'abilityToPay', 'competitionWeakness',
       'easeToBuild', 'distributionAccess', 'workflowAnchor',
       'marketTiming', 'revenueDensity', 'switchingFriction', 'aiAdvantage', 'marketExpansion',
+      'unitEconomics', 'founderFit', 'defensibility',
     ];
 
     for (const id of detectorIds) {

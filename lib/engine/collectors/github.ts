@@ -144,60 +144,107 @@ export class GitHubCollector implements Collector {
   }
 
   private async searchIssues(query: string, seen: Set<string>, evidence: Evidence[]): Promise<void> {
+    // Run two searches in parallel: one broad, one pain-focused
+    await Promise.allSettled([
+      this.searchIssuesBroad(query, seen, evidence),
+      this.searchIssuesPain(query, seen, evidence),
+    ]);
+  }
+
+  private async searchIssuesBroad(query: string, seen: Set<string>, evidence: Evidence[]): Promise<void> {
     try {
-      // Search for issues that contain the query terms — add label qualifiers
-      // to find feature requests and bug reports specifically
-      const issueQuery = `${query} is:issue label:bug,feature,enhancement,"feature request"`;
-      const url = `https://api.github.com/search/issues?q=${encodeURIComponent(issueQuery)}&sort=reactions&order=desc&per_page=10`;
+      // Broad issue search without restrictive label filters
+      const issueQuery = `${query} is:issue is:open`;
+      const url = `https://api.github.com/search/issues?q=${encodeURIComponent(issueQuery)}&sort=reactions&order=desc&per_page=15`;
       const data = await throttledFetchJson<GHIssueResponse>(url, {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
       });
 
-      // Extract domain keywords to filter relevant issues
       const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
 
       for (const issue of data.items) {
-        if (seen.has(issue.html_url)) continue;
-
-        const titleLower = issue.title.toLowerCase();
-        // Issue title must contain at least one query keyword
-        const isRelevant = queryWords.some(kw => titleLower.includes(kw));
-        if (!isRelevant) continue;
-
-        seen.add(issue.html_url);
-
-        const body = (issue.body ?? '').slice(0, 300);
-        const text = `${issue.title} ${body}`;
-        if (text.trim().length < 20) continue;
-
-        const labels = issue.labels.map(l => l.name.toLowerCase());
-        const isFeatureRequest = labels.some(l =>
-          l.includes('feature') || l.includes('enhancement') || l.includes('request')
-        );
-        const isBug = labels.some(l => l.includes('bug'));
-
-        let signalType = classifySignal(text);
-        if (isFeatureRequest) signalType = 'demand';
-        if (isBug) signalType = 'pain';
-
-        const reactions = issue.reactions?.total_count ?? 0;
-        let confMin = 0.5;
-        let confMax = 0.7;
-        if (reactions > 5) { confMin = 0.6; confMax = 0.8; }
-        if (issue.comments > 10) { confMin += 0.05; confMax = Math.min(0.85, confMax + 0.05); }
-
-        evidence.push({
-          source: 'github:issue',
-          url: issue.html_url,
-          excerpt: `${issue.title} (${issue.comments} comments, ${reactions} reactions)`,
-          signalType,
-          sourceTier: 2,
-          confidence: computeConfidence(text, confMin, confMax),
-          timestamp: new Date(issue.created_at).getTime(),
-        });
+        this.processIssue(issue, queryWords, seen, evidence);
       }
     } catch (err) {
-      console.warn(`[GitHub] Issue search failed for "${query}":`, (err as Error).message);
+      console.warn(`[GitHub] Broad issue search failed for "${query}":`, (err as Error).message);
     }
+  }
+
+  private async searchIssuesPain(query: string, seen: Set<string>, evidence: Evidence[]): Promise<void> {
+    try {
+      // Pain-specific search: find issues expressing frustration or requesting features
+      const painTerms = ['broken', 'slow', 'frustrat', 'workaround', 'hack', 'need', 'wish', 'please add'];
+      const keywords = query.split(/\s+/).filter(w => w.length > 3).slice(0, 2).join(' ');
+      const painQuery = `${keywords} ${painTerms.slice(0, 3).join(' OR ')} is:issue`;
+      const url = `https://api.github.com/search/issues?q=${encodeURIComponent(painQuery)}&sort=comments&order=desc&per_page=10`;
+      const data = await throttledFetchJson<GHIssueResponse>(url, {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+      });
+
+      const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+
+      for (const issue of data.items) {
+        this.processIssue(issue, queryWords, seen, evidence);
+      }
+    } catch (err) {
+      console.warn(`[GitHub] Pain issue search failed for "${query}":`, (err as Error).message);
+    }
+  }
+
+  private processIssue(
+    issue: GHIssue,
+    queryWords: string[],
+    seen: Set<string>,
+    evidence: Evidence[],
+  ): void {
+    if (seen.has(issue.html_url)) return;
+
+    const titleLower = issue.title.toLowerCase();
+    const bodyLower = (issue.body ?? '').toLowerCase().slice(0, 500);
+    const combined = `${titleLower} ${bodyLower}`;
+
+    // Issue must contain at least one query keyword in title or body
+    const isRelevant = queryWords.some(kw => combined.includes(kw));
+    if (!isRelevant) return;
+
+    seen.add(issue.html_url);
+
+    const text = `${issue.title} ${(issue.body ?? '').slice(0, 300)}`;
+    if (text.trim().length < 20) return;
+
+    const labels = issue.labels.map(l => l.name.toLowerCase());
+    const isFeatureRequest = labels.some(l =>
+      l.includes('feature') || l.includes('enhancement') || l.includes('request')
+    );
+    const isBug = labels.some(l => l.includes('bug'));
+
+    // Check body for pain keywords
+    const painKeywords = /\b(frustrat|annoying|broken|terrible|awful|workaround|hack|painful|impossible|unacceptable|unusable)\b/i;
+    const hasPainInBody = painKeywords.test(combined);
+
+    let signalType = classifySignal(text);
+    if (isFeatureRequest) signalType = 'demand';
+    if (isBug || hasPainInBody) signalType = 'pain';
+
+    const reactions = issue.reactions?.total_count ?? 0;
+    let confMin = 0.5;
+    let confMax = 0.7;
+    if (reactions > 5) { confMin = 0.6; confMax = 0.8; }
+    if (reactions > 20) { confMin = 0.7; confMax = 0.85; }
+    if (issue.comments > 10) { confMin += 0.05; confMax = Math.min(0.9, confMax + 0.05); }
+
+    // High-engagement issues are strong signals
+    const engagement = reactions + issue.comments;
+    const engagementNote = engagement > 20 ? ` [HIGH ENGAGEMENT]` : '';
+
+    evidence.push({
+      source: 'github:issue',
+      url: issue.html_url,
+      excerpt: `${issue.title} (${issue.comments} comments, ${reactions} reactions)${engagementNote}`,
+      signalType,
+      sourceTier: 2,
+      confidence: computeConfidence(text, confMin, confMax),
+      timestamp: new Date(issue.created_at).getTime(),
+    });
   }
 }

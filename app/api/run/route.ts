@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       topOpportunity: sorted[0]?.jobToBeDone ?? 'N/A',
       collectorStats: result.collectorStats,
       queriesUsed: result.queriesUsed,
+      apiCost: result.apiCost,
     };
 
     return NextResponse.json(run);

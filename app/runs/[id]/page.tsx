@@ -27,7 +27,7 @@ export default function RunPage() {
   const [selected, setSelected] = useState<OpportunityCandidate | null>(null);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(`signalforge_run_${params.id}`);
+    const stored = localStorage.getItem(`signalforge_run_${params.id}`);
     if (stored) {
       setRun(JSON.parse(stored));
     }
@@ -188,6 +188,14 @@ export default function RunPage() {
               <span className="text-xs text-neutral-500">Queries: </span>
               <span className="text-xs text-neutral-400">
                 {run.queriesUsed.join(' · ')}
+              </span>
+            </div>
+          )}
+          {run.apiCost && run.apiCost.calls > 0 && (
+            <div className="mt-1">
+              <span className="text-xs text-neutral-500">API Cost: </span>
+              <span className="text-xs text-neutral-400">
+                {run.apiCost.calls} calls, {run.apiCost.inputTokens.toLocaleString()} input + {run.apiCost.outputTokens.toLocaleString()} output tokens = ${run.apiCost.costUsd.toFixed(4)}
               </span>
             </div>
           )}

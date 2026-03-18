@@ -12,6 +12,9 @@ import { MarketTimingDetector } from './market-timing';
 import { RevenueDensityDetector } from './revenue-density';
 import { SwitchingFrictionDetector } from './switching-friction';
 import { AIAdvantageDetector } from './ai-advantage';
+import { UnitEconomicsDetector } from './unit-economics';
+import { FounderFitDetector } from './founder-fit';
+import { DefensibilityDetector } from './defensibility';
 
 export function createDetectors(): Detector[] {
   return [
@@ -27,6 +30,9 @@ export function createDetectors(): Detector[] {
     new RevenueDensityDetector(),
     new SwitchingFrictionDetector(),
     new AIAdvantageDetector(),
+    new UnitEconomicsDetector(),
+    new FounderFitDetector(),
+    new DefensibilityDetector(),
   ];
 }
 

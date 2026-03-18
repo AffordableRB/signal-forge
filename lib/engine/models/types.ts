@@ -172,8 +172,22 @@ export interface OpportunityCandidate {
   // Confidence & objectivity layer
   confidence?: ConfidenceBreakdown;
   scoringOutput?: ScoringOutput;
+  // Volume estimate (inferred from evidence sources)
+  volumeEstimate?: { relativeVolume: string; score: number; signals: string[] };
   // Deep validation (only on top opportunities)
   deepValidation?: DeepValidation;
+  // LLM enrichment extras
+  comparableCompanies?: Array<{
+    name: string;
+    whatTheyDid: string;
+    outcome: string;
+    lessonForThisOpportunity: string;
+  }>;
+  contrarianAnalysis?: {
+    bestArgumentAgainst: string;
+    counterArgument: string;
+    riskLevel: 'low' | 'medium' | 'high';
+  };
 }
 
 // ─── Deep Validation Types ──────────────────────────────────────────
@@ -232,6 +246,17 @@ export interface DeepValidation {
   biggestRisk: string;
   validationTests: ValidationTest[];
   killReasons: string[]; // reasons this could fail even with good signals
+  comparableCompanies?: Array<{
+    name: string;
+    whatTheyDid: string;
+    outcome: string;
+    lessonForThisOpportunity: string;
+  }>;
+  contrarian?: {
+    bestArgumentAgainst: string;
+    counterArgument: string;
+    riskLevel: 'low' | 'medium' | 'high';
+  };
 }
 
 export interface PipelineContext {

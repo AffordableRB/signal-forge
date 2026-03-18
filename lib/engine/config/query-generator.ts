@@ -6,14 +6,21 @@ import { callClaude, isLLMAvailable } from '../detectors/llm-client';
 
 const QUERY_SYSTEM_PROMPT = `You generate search queries to discover business opportunities and pain points in a specific industry or topic.
 
+MANDATORY CATEGORIES — you MUST include at least one query from each category (in order of priority):
+1. PAIN: Find complaints, frustrations, and problems people have ("X is broken", "hate using", "waste of time")
+2. COMPETITION: Find existing tools, competitors, and alternatives ("best X software", "X alternatives", "compare X tools")
+3. DEMAND: Find people actively looking for solutions ("looking for X", "need a tool for", "recommend X software")
+4. MONEY: Find pricing, willingness to pay, job postings that signal manual work ("X pricing", "X cost", "hiring X coordinator")
+
+If more queries are requested, add from these bonus categories:
+5. GAPS: Find unmet needs ("I wish there was", "someone should build", "no good tool for")
+6. TRENDS: Find market timing signals ("X industry 2025", "new regulations for X")
+
 RULES:
-- Generate exactly the number of queries requested
-- Each query should target a DIFFERENT angle: pain points, complaints, workflow problems, expensive manual processes, software gaps, hiring difficulties, regulatory burdens, pricing frustrations
 - Queries should be what a real person would type into Google or Reddit search
-- Mix formats: some should target Reddit/forums, some Google, some review sites
 - Be SPECIFIC to the industry. "construction scheduling problems" is better than "business problems"
-- Include queries that would find: existing competitors, pricing data, job postings (signals of manual work), complaints about current solutions
 - Do NOT include generic business queries. Every query must relate to the specific topic.
+- Do NOT prefix queries with category labels. Just return the raw search query strings.
 
 OUTPUT FORMAT:
 Return ONLY a JSON array of strings, no markdown fences, no explanation.
@@ -52,23 +59,18 @@ function parseQueryResponse(raw: string): string[] {
 
 // Template-based fallback when no LLM available
 function generateTemplateQueries(topic: string, count: number): string[] {
+  // Ordered by mandatory category: PAIN, COMPETITION, DEMAND, MONEY, then bonus
   const templates = [
-    `${topic} software problems reddit`,
-    `${topic} workflow automation pain points`,
-    `${topic} "too expensive" OR "waste of time" OR "manual process"`,
-    `${topic} competitors alternatives pricing`,
-    `${topic} complaints reviews`,
-    `${topic} hiring difficulties OR "can't find" OR "looking for"`,
-    `${topic} scheduling OR dispatch OR tracking software`,
-    `${topic} small business challenges 2024 2025`,
+    `${topic} problems complaints "waste of time" reddit`,
+    `${topic} software alternatives competitors pricing`,
+    `${topic} "looking for" OR "need a tool" OR "recommend" software`,
+    `${topic} pricing cost hiring coordinator OR specialist`,
     `${topic} "I wish there was" OR "someone should build"`,
-    `${topic} industry trends market size`,
-    `${topic} regulatory compliance software`,
-    `${topic} invoicing billing payment problems`,
-    `${topic} customer management CRM alternative`,
-    `${topic} reporting analytics dashboard`,
-    `${topic} communication coordination problems`,
-    `${topic} training onboarding challenges`,
+    `${topic} industry trends 2025 challenges`,
+    `${topic} workflow automation pain points`,
+    `${topic} reviews "too expensive" OR frustrating`,
+    `${topic} small business challenges manual process`,
+    `${topic} scheduling OR dispatch OR tracking software`,
   ];
   return templates.slice(0, count);
 }

@@ -58,6 +58,7 @@ export function makeCandidate(overrides: Partial<OpportunityCandidate> & {
     'demand', 'painIntensity', 'abilityToPay', 'competitionWeakness',
     'easeToBuild', 'distributionAccess', 'workflowAnchor',
     'marketTiming', 'revenueDensity', 'switchingFriction', 'aiAdvantage', 'marketExpansion',
+    'unitEconomics', 'founderFit', 'defensibility',
   ];
 
   const detectorResults: DetectorResult[] = hasDetectorScores

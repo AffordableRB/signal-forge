@@ -192,6 +192,17 @@ export interface DeepValidation {
   biggestRisk: string;
   validationTests: ValidationTest[];
   killReasons: string[];
+  comparableCompanies?: Array<{
+    name: string;
+    whatTheyDid: string;
+    outcome: string;
+    lessonForThisOpportunity: string;
+  }>;
+  contrarian?: {
+    bestArgumentAgainst: string;
+    counterArgument: string;
+    riskLevel: 'low' | 'medium' | 'high';
+  };
 }
 
 export interface OpportunityCandidate {
@@ -216,7 +227,19 @@ export interface OpportunityCandidate {
   validationPlan?: ValidationPlan;
   confidence?: ConfidenceBreakdown;
   scoringOutput?: ScoringOutput;
+  volumeEstimate?: { relativeVolume: string; score: number; signals: string[] };
   deepValidation?: DeepValidation;
+  comparableCompanies?: Array<{
+    name: string;
+    whatTheyDid: string;
+    outcome: string;
+    lessonForThisOpportunity: string;
+  }>;
+  contrarianAnalysis?: {
+    bestArgumentAgainst: string;
+    counterArgument: string;
+    riskLevel: 'low' | 'medium' | 'high';
+  };
 }
 
 export interface CollectorStat {
@@ -251,5 +274,6 @@ export interface RunRecord {
   candidates?: OpportunityCandidate[];
   collectorStats?: CollectorStat[];
   queriesUsed?: string[];
+  apiCost?: { calls: number; inputTokens: number; outputTokens: number; costUsd: number };
   error?: string;
 }

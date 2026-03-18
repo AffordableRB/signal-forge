@@ -6,7 +6,7 @@ import { collectAllSignals, CollectorStat } from './collectors';
 import { clusterSignals } from './cluster';
 import { analyzeAll } from './detectors';
 import { llmAnalyzeAll } from './detectors/llm-analyzer';
-import { isLLMAvailable } from './detectors/llm-client';
+import { isLLMAvailable, resetCostTracker, getCostTracker } from './detectors/llm-client';
 import { scoreAll, rankCandidates } from './scoring';
 import { applyFilters } from './filters';
 import { applyKillSwitch } from './reality/kill-switch';
@@ -24,6 +24,8 @@ import { computeConfidence } from './confidence/confidence-scorer';
 import { generateScoringOutput } from './confidence/scoring-output';
 import { deduplicateEvidence } from './collectors/dedup';
 import { deepValidateTop } from './validation/deep-validator';
+import { llmEnrichCandidate } from './enrichment/llm-enrichment';
+import { estimateSearchVolume } from './collectors/volume-estimator';
 
 export interface PhaseProgress {
   phase: ScanPhase;
@@ -31,6 +33,13 @@ export interface PhaseProgress {
   status: 'running' | 'completed' | 'skipped';
   durationMs: number;
   signalsAdded: number;
+}
+
+export interface ApiCost {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 }
 
 export interface PipelineResult {
@@ -42,6 +51,7 @@ export interface PipelineResult {
   queriesUsed: string[];
   scanMode: ScanMode;
   phases: PhaseProgress[];
+  apiCost?: ApiCost;
 }
 
 export type PhaseCallback = (progress: PhaseProgress) => void;
@@ -54,6 +64,7 @@ export async function runPipeline(
   topic?: string,
 ): Promise<PipelineResult> {
   const config = SCAN_MODES[mode];
+  resetCostTracker();
 
   // Generate topic-focused queries when a topic is provided, otherwise use seed queries
   const queries = topic
@@ -267,10 +278,26 @@ export async function runPipeline(
     ? await llmAnalyzeAll(analyzed)
     : needsReanalysis ? analyzeAll(analyzed) : analyzed;
 
-  // Enrich
-  const enriched = reanalyzed.map(c => enrichCandidate(c));
+  // Enrich — use LLM enrichment for top candidates when available,
+  // fall back to heuristic enrichment for the rest
+  let enriched: OpportunityCandidate[];
+  if (isLLMAvailable() && hasTime()) {
+    // Score first to identify top candidates for LLM enrichment
+    const preScored = scoreAll(reanalyzed.map(c => enrichCandidate(c)));
+    const preSorted = [...preScored].sort((a, b) => b.scores.final - a.scores.final);
+    const maxEnrich = mode === 'quick' ? 2 : mode === 'standard' ? 3 : 4;
+    const topForLLM = preSorted.filter(c => !c.rejected).slice(0, maxEnrich);
 
-  // Score
+    // LLM enrich top candidates in parallel
+    const llmEnriched = await Promise.all(topForLLM.map(c => llmEnrichCandidate(c)));
+    const llmMap = new Map(llmEnriched.map(c => [c.id, c]));
+
+    enriched = preSorted.map(c => llmMap.get(c.id) ?? c);
+  } else {
+    enriched = reanalyzed.map(c => enrichCandidate(c));
+  }
+
+  // Score (re-score after enrichment)
   const scored = scoreAll(enriched);
 
   // Confidence
@@ -286,14 +313,18 @@ export async function runPipeline(
   // Rank
   const ranked = rankCandidates(filtered);
 
-  // Deep validation on top 2 (only for thorough mode — too slow for 60s serverless limit)
-  const validated = (isLLMAvailable() && hasTime() && mode === 'thorough')
-    ? await deepValidateTop(ranked, 2)
+  // Deep validation — expand to more candidates based on mode
+  // thorough: top 5, deep: top 3, standard: top 2 (quick: skip — no time)
+  const deepValCount = mode === 'thorough' ? 5 : mode === 'deep' ? 3 : mode === 'standard' ? 2 : 0;
+  const validated = (isLLMAvailable() && hasTime() && deepValCount > 0)
+    ? await deepValidateTop(ranked, deepValCount)
     : ranked;
 
   const accepted = validated.filter(c => !c.rejected);
 
   emitPhase('analysis', 'completed', Date.now() - analysisStart, 0);
+
+  const apiCost = getCostTracker();
 
   return {
     candidates: validated,
@@ -304,6 +335,7 @@ export async function runPipeline(
     queriesUsed: queries,
     scanMode: mode,
     phases,
+    apiCost,
   };
 }
 
@@ -331,6 +363,7 @@ function enrichCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
   const withWedges = { ...withMarket, purpleOpportunities };
   const startupConcepts = synthesizeStartupConcepts(withWedges);
   const validationPlan = generateValidationPlan(withWedges);
+  const volumeEstimate = estimateSearchVolume(candidate.evidence);
 
-  return { ...withWedges, startupConcepts, validationPlan };
+  return { ...withWedges, startupConcepts, validationPlan, volumeEstimate };
 }

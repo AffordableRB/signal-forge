@@ -7,6 +7,12 @@ import { StarButton } from './star-button';
 import { WhyThisExists } from './why-this-exists';
 import { EvidenceTimeline } from './evidence-timeline';
 import { AnalystView } from './analyst-view';
+import { InvestmentThesis } from './business-case/investment-thesis';
+import { ProofWall } from './business-case/proof-wall';
+import { UnitEconomicsVisual } from './business-case/unit-economics-visual';
+import { RevenueProjectionChart } from './business-case/revenue-projection-chart';
+import { CompetitivePositionChart } from './business-case/competitive-position-chart';
+import { RiskHeatmap } from './business-case/risk-heatmap';
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -24,6 +30,7 @@ function formatCurrency(n: number): string {
 
 const PRIMARY_DETECTORS = [
   'demand', 'painIntensity', 'abilityToPay', 'competitionWeakness',
+  'unitEconomics', 'defensibility', 'founderFit',
   'easeToBuild', 'distributionAccess', 'workflowAnchor',
 ];
 
@@ -82,7 +89,27 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
         {runId && <StarButton candidate={c} runId={runId} size="md" />}
       </div>
 
-      {/* Deep Validation Verdict */}
+      {/* ══════ BUSINESS CASE ══════ */}
+
+      {/* Investment Thesis — the hero "should I start this?" panel */}
+      <InvestmentThesis candidate={c} />
+
+      {/* Evidence Proof Wall — real quotes proving each dimension */}
+      <ProofWall candidate={c} />
+
+      {/* Financial Viability */}
+      <UnitEconomicsVisual candidate={c} />
+      <RevenueProjectionChart candidate={c} />
+
+      {/* Competitive Positioning */}
+      <CompetitivePositionChart candidate={c} />
+
+      {/* Risk Assessment */}
+      <RiskHeatmap candidate={c} />
+
+      {/* ══════ DETAILED ANALYSIS ══════ */}
+
+      {/* Deep Validation Verdict (full detail) */}
       {dv && <DeepValidationPanel validation={dv} />}
 
       {/* Why This Exists */}
@@ -142,6 +169,33 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
             <span>Innovation gap: {ms.innovationGap}/10</span>
             <span>Pricing similarity: {ms.pricingSimilarity}/10</span>
           </div>
+        </div>
+      )}
+
+      {/* Search Demand Volume */}
+      {c.volumeEstimate && c.volumeEstimate.signals.length > 0 && (
+        <div className="border border-neutral-800 rounded-lg p-5">
+          <h3 className="text-sm font-semibold text-neutral-300 mb-3">Search Demand Volume</h3>
+          <div className="flex items-center gap-4 mb-3">
+            <span className={`px-2.5 py-1 text-xs font-bold rounded uppercase ${
+              c.volumeEstimate.relativeVolume === 'very-high' ? 'text-emerald-400 bg-emerald-950/30 border border-emerald-900/30' :
+              c.volumeEstimate.relativeVolume === 'high' ? 'text-emerald-400 bg-emerald-950/20 border border-emerald-900/20' :
+              c.volumeEstimate.relativeVolume === 'medium' ? 'text-amber-400 bg-amber-950/20 border border-amber-900/20' :
+              c.volumeEstimate.relativeVolume === 'low' ? 'text-orange-400 bg-orange-950/20 border border-orange-900/20' :
+              'text-red-400 bg-red-950/20 border border-red-900/20'
+            }`}>
+              {c.volumeEstimate.relativeVolume.replace('-', ' ')}
+            </span>
+            <span className="text-sm text-neutral-400 font-mono">{c.volumeEstimate.score}/100</span>
+          </div>
+          <ul className="space-y-1">
+            {c.volumeEstimate.signals.map((signal, i) => (
+              <li key={i} className="text-xs text-neutral-500 flex items-start gap-2">
+                <span className="text-neutral-600 mt-0.5">-</span>
+                {signal}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -307,6 +361,61 @@ export function OpportunityDetail({ candidate: c, runId = '' }: Props) {
 
       {/* Analyst View — Charts & Confidence Metrics */}
       <AnalystView candidate={c} />
+
+      {/* Contrarian Analysis */}
+      {c.contrarianAnalysis && c.contrarianAnalysis.bestArgumentAgainst && (
+        <div className={`border rounded-lg p-5 ${
+          c.contrarianAnalysis.riskLevel === 'high' ? 'border-red-900/50 bg-red-950/10' :
+          c.contrarianAnalysis.riskLevel === 'medium' ? 'border-amber-900/50 bg-amber-950/10' :
+          'border-neutral-800'
+        }`}>
+          <h3 className="text-sm font-semibold text-neutral-300 mb-3">
+            Contrarian Analysis
+            <span className={`ml-2 text-xs font-normal px-1.5 py-0.5 rounded ${
+              c.contrarianAnalysis.riskLevel === 'high' ? 'text-red-400 bg-red-950/40' :
+              c.contrarianAnalysis.riskLevel === 'medium' ? 'text-amber-400 bg-amber-950/40' :
+              'text-emerald-400 bg-emerald-950/40'
+            }`}>
+              {c.contrarianAnalysis.riskLevel} risk
+            </span>
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <div className="text-xs text-red-400 uppercase tracking-wider mb-1">Best argument against</div>
+              <p className="text-sm text-neutral-300">{c.contrarianAnalysis.bestArgumentAgainst}</p>
+            </div>
+            <div>
+              <div className="text-xs text-emerald-400 uppercase tracking-wider mb-1">Counter-argument</div>
+              <p className="text-sm text-neutral-300">{c.contrarianAnalysis.counterArgument}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comparable Companies */}
+      {c.comparableCompanies && c.comparableCompanies.length > 0 && (
+        <div className="border border-neutral-800 rounded-lg p-5">
+          <h3 className="text-sm font-semibold text-neutral-300 mb-3">Comparable Companies</h3>
+          <div className="space-y-3">
+            {c.comparableCompanies.map((comp, i) => (
+              <div key={i} className="border border-neutral-800/50 rounded p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-medium text-neutral-200">{comp.name}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    comp.outcome.toLowerCase().includes('fail') || comp.outcome.toLowerCase().includes('shut')
+                      ? 'text-red-400 bg-red-950/40'
+                      : 'text-emerald-400 bg-emerald-950/40'
+                  }`}>
+                    {comp.outcome.slice(0, 60)}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400">{comp.whatTheyDid}</p>
+                <p className="text-xs text-neutral-500 mt-1">Lesson: {comp.lessonForThisOpportunity}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Validation Plan */}
       {plan && (

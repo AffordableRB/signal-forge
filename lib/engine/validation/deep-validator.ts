@@ -115,7 +115,20 @@ Return ONLY a JSON object with this exact structure (no markdown fences, no expl
       "costRequired": "<dollar amount>"
     }
   ],
-  "killReasons": ["<reason 1 this could fail even with good signals>", "<reason 2>", "<reason 3>"]
+  "killReasons": ["<reason 1 this could fail even with good signals>", "<reason 2>", "<reason 3>"],
+  "comparableCompanies": [
+    {
+      "name": "<real company that tackled a similar problem>",
+      "whatTheyDid": "<1 sentence>",
+      "outcome": "<funding raised, revenue, acquisition, or failure — use real data you know>",
+      "lessonForThisOpportunity": "<what to learn from their success or failure>"
+    }
+  ],
+  "contrarian": {
+    "bestArgumentAgainst": "<the strongest 2-3 sentence case for why this will FAIL — steelman the opposition>",
+    "counterArgument": "<why the failure argument might be wrong — only if you genuinely believe it>",
+    "riskLevel": "low" | "medium" | "high"
+  }
 }`;
 
 function buildValidationPrompt(candidate: OpportunityCandidate): string {
@@ -277,6 +290,17 @@ function parseValidationResponse(raw: string): DeepValidation | null {
         costRequired: String(t.costRequired || ''),
       })),
       killReasons: (parsed.killReasons || []).map(String),
+      comparableCompanies: (parsed.comparableCompanies || []).map((c: Record<string, unknown>) => ({
+        name: String(c.name || ''),
+        whatTheyDid: String(c.whatTheyDid || ''),
+        outcome: String(c.outcome || ''),
+        lessonForThisOpportunity: String(c.lessonForThisOpportunity || ''),
+      })),
+      contrarian: parsed.contrarian ? {
+        bestArgumentAgainst: String(parsed.contrarian.bestArgumentAgainst || ''),
+        counterArgument: String(parsed.contrarian.counterArgument || ''),
+        riskLevel: ['low', 'medium', 'high'].includes(parsed.contrarian?.riskLevel) ? parsed.contrarian.riskLevel : 'medium',
+      } : undefined,
     };
   } catch (err) {
     console.error('[DeepValidator] Parse error:', err instanceof Error ? err.message : err);
@@ -309,9 +333,18 @@ export async function deepValidate(candidate: OpportunityCandidate): Promise<Opp
 
   console.log(`[DeepValidator] Verdict: ${validation.verdict} (${validation.confidencePercent}% confidence)`);
 
+  // Merge comparable companies and contrarian from both enrichment and validation
+  const comparableCompanies = [
+    ...(candidate.comparableCompanies || []),
+    ...(validation.comparableCompanies || []),
+  ];
+  const contrarianAnalysis = validation.contrarian || candidate.contrarianAnalysis;
+
   return {
     ...candidate,
     deepValidation: validation,
+    comparableCompanies: comparableCompanies.length > 0 ? comparableCompanies : undefined,
+    contrarianAnalysis,
   };
 }
 
