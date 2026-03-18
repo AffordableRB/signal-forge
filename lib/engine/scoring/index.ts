@@ -72,6 +72,17 @@ function calculateScores(candidate: OpportunityCandidate): OpportunityScores {
     base = Math.min(base, 5.0);
   }
 
+  // ─── Momentum boost/penalty ───────────────────────────────────
+  // Accelerating interest gives a slight boost; decelerating caps score
+  const momentumScore = breakdown['momentum'] ?? 5;
+  if (momentumScore >= 8) {
+    // Strong upward trend — small boost
+    base = Math.min(10, base + 0.3);
+  } else if (momentumScore <= 2) {
+    // Declining interest — cap the score
+    base = Math.min(base, 5.5);
+  }
+
   const final = Math.round(base * 100) / 100;
   return { final, breakdown };
 }

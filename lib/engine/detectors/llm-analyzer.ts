@@ -187,6 +187,7 @@ export async function llmAnalyzeCandidate(candidate: OpportunityCandidate): Prom
     'demand', 'painIntensity', 'abilityToPay', 'competitionWeakness',
     'easeToBuild', 'distributionAccess', 'workflowAnchor',
     'marketTiming', 'revenueDensity', 'switchingFriction', 'aiAdvantage', 'marketExpansion',
+    'unitEconomics', 'founderFit', 'defensibility',
   ] as const;
 
   const detectorResults: DetectorResult[] = detectorIds.map(id => ({

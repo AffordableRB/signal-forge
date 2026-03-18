@@ -14,6 +14,7 @@ export const SCORING_WEIGHTS: Record<string, number> = {
   // Supporting detectors
   marketTiming: 0.04,
   revenueDensity: 0.04,
+  momentum: 0.03,            // Rising or falling interest — trending up = better timing
   switchingFriction: 0.03,
   aiAdvantage: 0.02,
   marketExpansion: 0.02,

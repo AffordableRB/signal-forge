@@ -26,6 +26,7 @@ import { deduplicateEvidence } from './collectors/dedup';
 import { deepValidateTop } from './validation/deep-validator';
 import { llmEnrichCandidate } from './enrichment/llm-enrichment';
 import { estimateSearchVolume } from './collectors/volume-estimator';
+import { extractCompetitorsAll } from './competitors/extract-competitors';
 
 export interface PhaseProgress {
   phase: ScanPhase;
@@ -297,8 +298,13 @@ export async function runPipeline(
     enriched = reanalyzed.map(c => enrichCandidate(c));
   }
 
-  // Score (re-score after enrichment)
-  const scored = scoreAll(enriched);
+  // Extract competitor data from evidence (pattern + LLM when available)
+  const withCompetitors = hasTime()
+    ? await extractCompetitorsAll(enriched)
+    : enriched;
+
+  // Score (re-score after enrichment + competitor extraction)
+  const scored = scoreAll(withCompetitors);
 
   // Confidence
   const withConfidence = scored.map(c => {
@@ -365,5 +371,18 @@ function enrichCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
   const validationPlan = generateValidationPlan(withWedges);
   const volumeEstimate = estimateSearchVolume(candidate.evidence);
 
-  return { ...withWedges, startupConcepts, validationPlan, volumeEstimate };
+  // Inject momentum as a detector result so it feeds into weighted scoring
+  const enrichedCandidate = { ...withWedges, startupConcepts, validationPlan, volumeEstimate };
+  if (momentum) {
+    const hasMomentumResult = enrichedCandidate.detectorResults.some(d => d.detectorId === 'momentum');
+    if (!hasMomentumResult) {
+      enrichedCandidate.detectorResults.push({
+        detectorId: 'momentum',
+        score: momentum.momentumScore,
+        explanation: `Trend: ${momentum.trend}. ${momentum.recent30d} signals in last 30d (${momentum.growthRate > 0 ? '+' : ''}${momentum.growthRate}% growth).`,
+      });
+    }
+  }
+
+  return enrichedCandidate;
 }
