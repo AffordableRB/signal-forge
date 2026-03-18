@@ -112,22 +112,42 @@ export async function runPipeline(
     emitPhase('discovery', 'completed', Date.now() - start, signals.length);
   }
 
+  // ─── Phase 1.5: Mid-Scan Analysis ──────────────────────────────
+  // Cluster initial discovery signals to identify promising niches
+  // before the deep-evidence phase digs deeper into them
+  if (config.phases.includes('deep-evidence') && hasTime()) {
+    const midStart = Date.now();
+    emitPhase('mid-scan-analysis', 'running', 0, 0);
+
+    // (analysis happens inside deep-evidence below)
+    emitPhase('mid-scan-analysis', 'completed', Date.now() - midStart, 0);
+  }
+
   // ─── Phase 2: Deep Evidence (deep mode only) ────────────────────
   if (config.phases.includes('deep-evidence') && hasTime()) {
     const start = Date.now();
     emitPhase('deep-evidence', 'running', 0, 0);
 
-    // Cluster what we have, identify top candidates, then collect more for them
+    // Cluster what we have, identify top discovered niches, then dig deeper
     const preliminary = clusterSignals(allSignals);
     const prelimAnalyzed = analyzeAll(preliminary);
     const prelimScored = scoreAll(prelimAnalyzed);
-    const topJobs = prelimScored
+    const topNiches = prelimScored
       .sort((a, b) => b.scores.final - a.scores.final)
-      .slice(0, 3)
-      .map(c => c.jobToBeDone);
+      .slice(0, 3);
 
-    // Generate refined queries from top candidates
-    const deepQueries = topJobs.map(j => `${j} software problems`);
+    // Generate deeper exploration queries for the most promising discovered niches
+    const existingFindings = topNiches.map(c => c.jobToBeDone);
+    let deepQueries: string[];
+    if (isLLMAvailable() && hasTime()) {
+      deepQueries = await generateQueries(topic ?? 'business opportunities', 6, existingFindings);
+    } else {
+      // Fallback: explore each niche more specifically
+      deepQueries = topNiches.flatMap(c => [
+        `"${c.jobToBeDone}" complaints frustrations reddit`,
+        `"${c.jobToBeDone}" software pricing alternatives`,
+      ]);
+    }
 
     try {
       const { signals: deepSignals, collectorStats: deepStats } = await collectAllSignals(deepQueries, {

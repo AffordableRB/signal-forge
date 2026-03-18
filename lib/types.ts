@@ -251,7 +251,7 @@ export interface CollectorStat {
 }
 
 export type ScanMode = 'quick' | 'standard' | 'deep' | 'thorough';
-export type ScanPhase = 'discovery' | 'deep-evidence' | 'market-mapping' | 'cross-validation' | 'analysis';
+export type ScanPhase = 'discovery' | 'mid-scan-analysis' | 'deep-evidence' | 'market-mapping' | 'cross-validation' | 'analysis';
 
 export interface PhaseStatus {
   id: ScanPhase;

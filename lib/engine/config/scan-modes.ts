@@ -4,6 +4,7 @@ export type ScanMode = 'quick' | 'standard' | 'deep' | 'thorough';
 
 export type ScanPhase =
   | 'discovery'
+  | 'mid-scan-analysis'
   | 'deep-evidence'
   | 'market-mapping'
   | 'cross-validation'
@@ -30,8 +31,9 @@ export interface ScanModeConfig {
 }
 
 export const PHASES: PhaseConfig[] = [
-  { id: 'discovery',        label: 'Discovery',        description: 'Initial signal collection from all sources' },
-  { id: 'deep-evidence',    label: 'Deep Evidence',    description: 'Expanded collection for top candidates' },
+  { id: 'discovery',          label: 'Discovery',          description: 'Exploring the space to find niche opportunities' },
+  { id: 'mid-scan-analysis', label: 'Mid-Scan Analysis',  description: 'Identifying the most promising discovered niches' },
+  { id: 'deep-evidence',     label: 'Deep Evidence',      description: 'Digging deeper into top discovered niches' },
   { id: 'market-mapping',   label: 'Market Mapping',   description: 'Competitor and market structure analysis' },
   { id: 'cross-validation', label: 'Cross-Validation', description: 'Verify findings across independent sources' },
   { id: 'analysis',         label: 'Final Analysis',   description: 'Scoring, confidence, and synthesis' },
