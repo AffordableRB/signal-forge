@@ -1,25 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { RunRecord, ScanMode, CollectorStat, PhaseStatus, OpportunityCandidate } from '@/lib/types';
+import { RunRecord, CollectorStat, PhaseStatus, OpportunityCandidate } from '@/lib/types';
 import { StatusDot } from '@/components/status-dot';
 import Link from 'next/link';
-
-// ─── Seed queries (mirrored from server for client orchestration) ──────
-const SEED_QUERIES = [
-  'missed call recovery software for home services',
-  'automated follow-up for contractor leads',
-  'client intake automation for law firms',
-  'review management for local businesses',
-  'appointment scheduling for dental clinics',
-  'invoice automation for freelancers',
-  'tenant screening for landlords',
-  'inventory tracking for small ecommerce',
-  'AI resume generator',
-  'employee onboarding automation',
-  'proposal generation for agencies',
-  'reputation monitoring for restaurants',
-];
 
 const ALL_COLLECTORS = [
   'hackernews', 'search-intent', 'google-trends', 'stackexchange', 'github',
@@ -33,18 +17,9 @@ interface RawSignal {
   evidence: unknown[];
 }
 
-// ─── Mode config ────────────────────────────────────────────────────────
+const ROUND_LABELS = ['Discovery', 'Deep Evidence', 'Cross-Validation', 'Analysis', 'Deep Validation'];
 
-const SCAN_MODE_INFO: Record<ScanMode, { label: string; desc: string; phases: number }> = {
-  quick:    { label: 'Quick',    desc: '~20s · 4 queries, AI analysis',                          phases: 2 },
-  standard: { label: 'Standard', desc: '~40s · 6 queries + market mapping',                    phases: 3 },
-  deep:     { label: 'Deep',     desc: '~55s · 8 queries, all 5 phases',                       phases: 5 },
-  thorough: { label: 'Thorough', desc: 'Multi-round · Every collector, refinement, max depth',  phases: 6 },
-};
-
-const PHASE_LABELS = ['Discovery', 'Deep Evidence', 'Market Mapping', 'Cross-Validation', 'Final Analysis'];
-
-// ─── Thorough scan steps ────────────────────────────────────────────────
+// --- Thorough scan steps ---
 
 interface ThoroughStep {
   round: string;
@@ -66,7 +41,7 @@ interface ThoroughProgress {
 function buildThoroughPlan(queries: string[]): ThoroughStep[] {
   const steps: ThoroughStep[] = [];
 
-  // Round 1: Discovery — each collector gets ALL queries with high limits
+  // Round 1: Discovery -- each collector gets ALL queries with high limits
   for (const collectorId of ALL_COLLECTORS) {
     steps.push({
       round: 'Discovery',
@@ -88,9 +63,9 @@ function buildThoroughPlan(queries: string[]): ThoroughStep[] {
 function buildRefinementSteps(topJobs: string[], round: string): ThoroughStep[] {
   const steps: ThoroughStep[] = [];
   const refinedQueries = topJobs.flatMap(j => [
-    `${j} software problems`,
-    `${j} competitors alternatives`,
-    `${j} pricing complaints`,
+    `"${j}" pain points frustrations reddit`,
+    `"${j}" "too expensive" OR "waste of time" OR "no good option"`,
+    `"${j}" small business freelancer problems`,
   ]);
 
   for (const collectorId of ALL_COLLECTORS) {
@@ -111,7 +86,7 @@ function buildRefinementSteps(topJobs: string[], round: string): ThoroughStep[] 
   return steps;
 }
 
-// ─── Component ──────────────────────────────────────────────────────────
+// --- Component ---
 
 export default function Dashboard() {
   const [runs, setRuns] = useState<RunRecord[]>(() => {
@@ -120,11 +95,9 @@ export default function Dashboard() {
     return stored ? JSON.parse(stored) : [];
   });
   const [launching, setLaunching] = useState(false);
-  const [scanMode, setScanMode] = useState<ScanMode>('standard');
   const [topic, setTopic] = useState('');
   const [scanError, setScanError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [currentPhase, setCurrentPhase] = useState(0);
   const [thoroughProgress, setThoroughProgress] = useState<ThoroughProgress | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef(false);
@@ -132,65 +105,26 @@ export default function Dashboard() {
   useEffect(() => {
     if (launching) {
       setElapsed(0);
-      setCurrentPhase(0);
       timerRef.current = setInterval(() => {
-        setElapsed(t => {
-          if (scanMode !== 'thorough') {
-            const phaseCount = SCAN_MODE_INFO[scanMode].phases;
-            const totalEstimate = scanMode === 'quick' ? 15 : scanMode === 'standard' ? 30 : 50;
-            const phaseIdx = Math.min(phaseCount - 1, Math.floor((t + 1) / totalEstimate * phaseCount));
-            setCurrentPhase(phaseIdx);
-          }
-          return t + 1;
-        });
+        setElapsed(t => t + 1);
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [launching, scanMode]);
+  }, [launching]);
 
   function persistRuns(updated: RunRecord[]) {
     setRuns(updated);
     localStorage.setItem('signalforge_runs', JSON.stringify(updated));
   }
 
-  // ─── Standard scan (quick/standard/deep) ──────────────────────────
+  // --- Client-orchestrated scan ---
 
-  async function handleStandardScan() {
-    setLaunching(true);
-    setScanError(null);
-    try {
-      const scanTopic = topic.trim();
-      const res = await fetch(`/api/run?mode=${scanMode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: scanTopic || undefined }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? `Server error (${res.status})`);
-      }
-      const run: RunRecord = await res.json();
+  const handleScan = useCallback(async () => {
+    const scanTopic = topic.trim();
+    if (!scanTopic) return;
 
-      localStorage.setItem(`signalforge_run_${run.id}`, JSON.stringify(run));
-      persistRuns([run, ...runs]);
-
-      if (run.status === 'completed') {
-        window.location.href = `/runs/${run.id}`;
-      } else if (run.status === 'failed') {
-        setScanError(run.error ?? 'Scan failed');
-      }
-    } catch (e) {
-      setScanError(e instanceof Error ? e.message : 'Scan failed — try a lighter scan mode.');
-    } finally {
-      setLaunching(false);
-    }
-  }
-
-  // ─── Thorough scan (client-orchestrated) ──────────────────────────
-
-  const handleThoroughScan = useCallback(async () => {
     setLaunching(true);
     setScanError(null);
     abortRef.current = false;
@@ -198,7 +132,6 @@ export default function Dashboard() {
     const allSignals: RawSignal[] = [];
     const allStats: CollectorStat[] = [];
     const phases: PhaseStatus[] = [];
-    const scanTopic = topic.trim();
 
     const progress: ThoroughProgress = {
       totalSteps: 0,
@@ -261,33 +194,29 @@ export default function Dashboard() {
     }
 
     try {
-      // ── Generate topic-focused queries ────────────────────────────
+      // -- Generate topic-focused queries --
       let queries: string[];
-      if (scanTopic) {
-        try {
-          updateProgress({ currentRound: 'Generating queries...', currentCollector: 'AI' });
-          const qRes = await fetch('/api/scan/generate-queries', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic: scanTopic, count: 12 }),
-          });
-          if (qRes.ok) {
-            const { queries: generated } = await qRes.json();
-            queries = generated;
-          } else {
-            queries = SEED_QUERIES;
-          }
-        } catch {
-          queries = SEED_QUERIES;
+      try {
+        updateProgress({ currentRound: 'Generating queries...', currentCollector: 'AI' });
+        const qRes = await fetch('/api/scan/generate-queries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: scanTopic, count: 12 }),
+        });
+        if (qRes.ok) {
+          const { queries: generated } = await qRes.json();
+          queries = generated;
+        } else {
+          throw new Error('Query generation failed');
         }
-      } else {
-        queries = SEED_QUERIES;
+      } catch (e) {
+        throw new Error(e instanceof Error ? e.message : 'Failed to generate queries');
       }
 
-      // ── Round 1: Discovery ──────────────────────────────────────
+      // -- Round 1: Discovery --
       const discoveryStart = Date.now();
       const discoverySteps = buildThoroughPlan(queries);
-      updateProgress({ totalSteps: discoverySteps.length + 16 + 8 }); // estimate total
+      updateProgress({ totalSteps: discoverySteps.length + 16 + 8 + 1 });
 
       for (const step of discoverySteps) {
         await runStep(step);
@@ -304,7 +233,7 @@ export default function Dashboard() {
 
       if (abortRef.current) throw new Error('Scan cancelled');
 
-      // ── Intermediate analysis to find top candidates ────────────
+      // -- Intermediate analysis to find top candidates --
       const midAnalysisStart = Date.now();
       updateProgress({ currentRound: 'Analyzing...', currentCollector: 'clustering' });
 
@@ -313,7 +242,7 @@ export default function Dashboard() {
         const midRes = await fetch('/api/scan/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signals: allSignals, topic: scanTopic || undefined }),
+          body: JSON.stringify({ signals: allSignals, topic: scanTopic }),
         });
         if (midRes.ok) {
           const { candidates } = await midRes.json();
@@ -324,18 +253,18 @@ export default function Dashboard() {
             .map((c: OpportunityCandidate) => c.jobToBeDone);
         }
       } catch {
-        // Fall back to using seed queries for refinement
+        // Fall back — no refinement if mid-analysis fails
       }
 
       phases.push({
-        id: 'analysis',
+        id: 'mid-analysis',
         label: 'Mid-Scan Analysis',
         status: 'completed',
         durationMs: Date.now() - midAnalysisStart,
         signalsAdded: 0,
       });
 
-      // ── Round 2: Deep Evidence (refined queries) ───────────────
+      // -- Round 2: Deep Evidence (refined queries) --
       if (topJobs.length > 0 && !abortRef.current) {
         const deepStart = Date.now();
         const deepSteps = buildRefinementSteps(topJobs, 'Deep Evidence');
@@ -359,7 +288,7 @@ export default function Dashboard() {
 
       if (abortRef.current) throw new Error('Scan cancelled');
 
-      // ── Round 3: Cross-validation (different query angles) ─────
+      // -- Round 3: Cross-validation (different query angles) --
       if (topJobs.length > 0 && !abortRef.current) {
         const crossStart = Date.now();
         const prevSignalCount = allSignals.length;
@@ -369,7 +298,6 @@ export default function Dashboard() {
           `${j} user experience issues`,
         ]);
 
-        // Only run fast collectors + reddit for validation
         const validationCollectors = ['hackernews', 'search-intent', 'google-trends', 'reddit', 'reviews'];
         const crossSteps: ThoroughStep[] = validationCollectors.map(collectorId => ({
           round: 'Cross-Validation',
@@ -378,7 +306,7 @@ export default function Dashboard() {
           options: { redditResultLimit: 20, subredditDepth: 3, reviewSnippetLimit: 10 },
         }));
 
-        updateProgress({ totalSteps: progress.currentStep + crossSteps.length + 1 });
+        updateProgress({ totalSteps: progress.currentStep + crossSteps.length + 1 + 1 });
 
         for (const step of crossSteps) {
           await runStep(step);
@@ -396,9 +324,9 @@ export default function Dashboard() {
 
       if (abortRef.current) throw new Error('Scan cancelled');
 
-      // ── Final Analysis ─────────────────────────────────────────
+      // -- Final Analysis --
       const finalStart = Date.now();
-      updateProgress({ currentRound: 'Final Analysis', currentCollector: 'scoring & ranking' });
+      updateProgress({ currentRound: 'Analysis', currentCollector: 'scoring & ranking' });
 
       const finalRes = await fetch('/api/scan/analyze', {
         method: 'POST',
@@ -414,15 +342,61 @@ export default function Dashboard() {
 
       phases.push({
         id: 'analysis',
-        label: 'Final Analysis',
+        label: 'Analysis',
         status: 'completed',
         durationMs: Date.now() - finalStart,
         signalsAdded: 0,
       });
+      updateProgress({ completedRounds: [...progress.completedRounds, 'Analysis'] });
 
-      // ── Build run record ───────────────────────────────────────
+      if (abortRef.current) throw new Error('Scan cancelled');
+
+      // -- Deep Validation --
+      const validationStart = Date.now();
+      updateProgress({ currentRound: 'Deep Validation', currentCollector: 'LLM validation' });
+
+      const top5 = (candidates as OpportunityCandidate[])
+        .filter((c: OpportunityCandidate) => !c.rejected)
+        .sort((a: OpportunityCandidate, b: OpportunityCandidate) => b.scores.final - a.scores.final)
+        .slice(0, 5);
+
+      let finalCandidates = candidates as OpportunityCandidate[];
+
+      if (top5.length > 0) {
+        try {
+          const valRes = await fetch('/api/scan/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ candidates: top5 }),
+          });
+
+          if (valRes.ok) {
+            const { candidates: validatedCandidates } = await valRes.json();
+            // Merge validated candidates back into the full list
+            const validatedMap = new Map(
+              (validatedCandidates as OpportunityCandidate[]).map((c: OpportunityCandidate) => [c.jobToBeDone, c])
+            );
+            finalCandidates = finalCandidates.map((c: OpportunityCandidate) =>
+              validatedMap.get(c.jobToBeDone) ?? c
+            );
+          }
+        } catch {
+          // Validation is best-effort; continue with unvalidated candidates
+        }
+      }
+
+      phases.push({
+        id: 'deep-validation',
+        label: 'Deep Validation',
+        status: 'completed',
+        durationMs: Date.now() - validationStart,
+        signalsAdded: 0,
+      });
+      updateProgress({ completedRounds: [...progress.completedRounds, 'Deep Validation'] });
+
+      // -- Build run record --
       const runId = crypto.randomUUID();
-      const sorted = (candidates as OpportunityCandidate[])
+      const sorted = finalCandidates
         .filter((c: OpportunityCandidate) => !c.rejected)
         .sort((a: OpportunityCandidate, b: OpportunityCandidate) => b.scores.final - a.scores.final);
 
@@ -431,10 +405,10 @@ export default function Dashboard() {
         date: new Date().toISOString(),
         status: 'completed',
         scanMode: 'thorough',
-        topic: scanTopic || undefined,
+        topic: scanTopic,
         phases,
-        candidates,
-        candidateCount: (candidates as OpportunityCandidate[]).length,
+        candidates: finalCandidates,
+        candidateCount: finalCandidates.length,
         topScore: sorted[0]?.scores.final ?? 0,
         topOpportunity: sorted[0]?.jobToBeDone ?? 'N/A',
         collectorStats: allStats,
@@ -447,23 +421,13 @@ export default function Dashboard() {
 
     } catch (e) {
       if (!abortRef.current) {
-        setScanError(e instanceof Error ? e.message : 'Thorough scan failed');
+        setScanError(e instanceof Error ? e.message : 'Scan failed');
       }
     } finally {
       setLaunching(false);
       setThoroughProgress(null);
     }
   }, [runs, topic]);
-
-  function handleRunScan() {
-    if (scanMode === 'thorough') {
-      handleThoroughScan();
-    } else {
-      handleStandardScan();
-    }
-  }
-
-  const modeInfo = SCAN_MODE_INFO[scanMode];
 
   return (
     <div>
@@ -472,26 +436,8 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-bold text-neutral-100">SignalForge</h1>
             <p className="text-sm text-neutral-500 mt-1">
-              Discover the best business opportunities in any industry
+              Discover niche business opportunities in any industry
             </p>
-          </div>
-          <div className="flex rounded-lg overflow-hidden border border-neutral-700">
-            {(['quick', 'standard', 'deep', 'thorough'] as ScanMode[]).map(mode => (
-              <button
-                key={mode}
-                onClick={() => setScanMode(mode)}
-                disabled={launching}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  scanMode === mode
-                    ? mode === 'thorough'
-                      ? 'bg-emerald-900/60 text-emerald-300'
-                      : 'bg-neutral-700 text-neutral-100'
-                    : 'bg-neutral-900 text-neutral-500 hover:text-neutral-300'
-                } disabled:cursor-not-allowed`}
-              >
-                {SCAN_MODE_INFO[mode].label}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -502,11 +448,9 @@ export default function Dashboard() {
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !launching) handleRunScan(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !launching && topic.trim()) handleScan(); }}
               disabled={launching}
-              placeholder={scanMode === 'thorough'
-                ? 'Enter a topic to scan... e.g. "pet care", "construction", "fitness coaching"'
-                : 'Enter a topic (optional for quick/standard/deep)...'}
+              placeholder='Enter an industry to explore... e.g. "beauty", "fitness", "construction"'
               className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg text-neutral-200 text-sm placeholder-neutral-600 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/50 disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {topic && !launching && (
@@ -519,21 +463,18 @@ export default function Dashboard() {
             )}
           </div>
           <button
-            onClick={handleRunScan}
-            disabled={launching || (scanMode === 'thorough' && !topic.trim())}
+            onClick={handleScan}
+            disabled={launching || !topic.trim()}
             className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
           >
             {launching ? 'Scanning...' : 'Scan'}
           </button>
         </div>
 
-        {/* Mode description */}
-        {!launching && !scanError && (
-          <p className="text-xs text-neutral-600 mt-2">
-            {modeInfo.desc}
-            {scanMode === 'thorough' && !topic.trim() && (
-              <span className="text-amber-500 ml-2">Enter a topic to start a thorough scan</span>
-            )}
+        {/* Hint */}
+        {!launching && !scanError && !topic.trim() && (
+          <p className="text-xs text-amber-500 mt-2">
+            Enter an industry or topic to start scanning
           </p>
         )}
       </div>
@@ -545,46 +486,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Standard scan progress (quick/standard/deep) */}
-      {launching && scanMode !== 'thorough' && (
-        <div className="border border-neutral-800 rounded-lg p-8 mb-6">
-          <div className="flex items-center gap-4 mb-5">
-            <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-            <div>
-              <p className="text-neutral-200 text-sm font-medium">
-                {SCAN_MODE_INFO[scanMode].label} Scan in progress...
-              </p>
-              <p className="text-neutral-500 text-xs mt-0.5">
-                {elapsed}s elapsed · Phase {currentPhase + 1}/{modeInfo.phases}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2 mb-4">
-            {PHASE_LABELS.slice(0, modeInfo.phases).map((label, i) => (
-              <div key={label} className="flex-1">
-                <div className={`h-1.5 rounded-full transition-all duration-700 ${
-                  i < currentPhase ? 'bg-emerald-500' :
-                  i === currentPhase ? 'bg-emerald-500/60 animate-pulse' :
-                  'bg-neutral-800'
-                }`} />
-                <p className={`text-[10px] mt-1 ${
-                  i <= currentPhase ? 'text-neutral-400' : 'text-neutral-700'
-                }`}>{label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Thorough scan progress */}
-      {launching && scanMode === 'thorough' && thoroughProgress && (
+      {/* Scan progress */}
+      {launching && thoroughProgress && (
         <div className="border border-emerald-900/30 bg-emerald-950/5 rounded-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
               <div>
                 <p className="text-neutral-200 text-sm font-medium">
-                  Thorough Scan — {thoroughProgress.currentRound}
+                  Scanning — {thoroughProgress.currentRound}
                 </p>
                 <p className="text-neutral-500 text-xs mt-0.5">
                   {elapsed}s elapsed · Step {thoroughProgress.currentStep}/{thoroughProgress.totalSteps} · {thoroughProgress.signalsCollected} evidence collected
@@ -601,7 +511,7 @@ export default function Dashboard() {
 
           {/* Round progress */}
           <div className="flex gap-2 mb-4">
-            {['Discovery', 'Deep Evidence', 'Cross-Validation', 'Final Analysis'].map(round => {
+            {ROUND_LABELS.map(round => {
               const done = thoroughProgress.completedRounds.includes(round);
               const active = thoroughProgress.currentRound === round;
               return (
@@ -650,7 +560,7 @@ export default function Dashboard() {
       {!launching && runs.length === 0 ? (
         <div className="border border-neutral-800 rounded-lg p-12 text-center">
           <p className="text-neutral-500 text-sm">
-            No runs yet. Select a scan mode and click &quot;Run Scan&quot; to discover opportunities.
+            No runs yet. Enter a topic and click &quot;Scan&quot; to discover opportunities.
           </p>
         </div>
       ) : (
@@ -660,7 +570,7 @@ export default function Dashboard() {
               <tr className="border-b border-neutral-800 text-left text-neutral-500 text-xs uppercase tracking-wider">
                 <th className="px-4 py-3 font-medium">Run ID</th>
                 <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Mode</th>
+                <th className="px-4 py-3 font-medium">Topic</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Top Score</th>
                 <th className="px-4 py-3 font-medium">Top Opportunity</th>
@@ -691,13 +601,8 @@ export default function Dashboard() {
                     {new Date(run.date).toLocaleString()}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                      run.scanMode === 'thorough' ? 'text-emerald-400 bg-emerald-950/40' :
-                      run.scanMode === 'deep' ? 'text-purple-400 bg-purple-950/40' :
-                      run.scanMode === 'quick' ? 'text-amber-400 bg-amber-950/40' :
-                      'text-blue-400 bg-blue-950/40'
-                    }`}>
-                      {run.scanMode ?? 'standard'}
+                    <span className="text-xs text-neutral-300">
+                      {run.topic ?? '-'}
                     </span>
                   </td>
                   <td className="px-4 py-3">

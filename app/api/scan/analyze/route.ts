@@ -18,11 +18,11 @@ import { computeConfidence } from '@/lib/engine/confidence/confidence-scorer';
 import { generateScoringOutput } from '@/lib/engine/confidence/scoring-output';
 import { deduplicateEvidence } from '@/lib/engine/collectors/dedup';
 import { filterSignalsByTopic } from '@/lib/engine/collectors/relevance-filter';
-import { deepValidateTop } from '@/lib/engine/validation/deep-validator';
-import { llmEnrichCandidate } from '@/lib/engine/enrichment/llm-enrichment';
+import { extractCompetitorsAll } from '@/lib/engine/competitors/extract-competitors';
 import { estimateSearchVolume } from '@/lib/engine/collectors/volume-estimator';
 
-export const maxDuration = 300; // LLM analysis + deep validation needs more time
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 interface AnalyzeRequest {
   signals: RawSignal[];
@@ -53,7 +53,20 @@ function enrichCandidate(candidate: OpportunityCandidate): OpportunityCandidate 
   const validationPlan = generateValidationPlan(withWedges);
   const volumeEstimate = estimateSearchVolume(candidate.evidence);
 
-  return { ...withWedges, startupConcepts, validationPlan, volumeEstimate };
+  // Inject momentum as a detector result so it feeds into weighted scoring
+  const enrichedCandidate = { ...withWedges, startupConcepts, validationPlan, volumeEstimate };
+  if (momentum) {
+    const hasMomentumResult = enrichedCandidate.detectorResults.some(d => d.detectorId === 'momentum');
+    if (!hasMomentumResult) {
+      enrichedCandidate.detectorResults.push({
+        detectorId: 'momentum',
+        score: momentum.momentumScore,
+        explanation: `Trend: ${momentum.trend}. ${momentum.recent30d} signals in last 30d (${momentum.growthRate > 0 ? '+' : ''}${momentum.growthRate}% growth).`,
+      });
+    }
+  }
+
+  return enrichedCandidate;
 }
 
 export async function POST(req: NextRequest) {
@@ -84,23 +97,14 @@ export async function POST(req: NextRequest) {
       ? await llmAnalyzeAll(candidates)
       : analyzeAll(candidates);
 
-    // Enrich — LLM enrichment for all candidates in thorough mode (300s timeout)
-    let enriched: OpportunityCandidate[];
-    if (isLLMAvailable()) {
-      // Heuristic enrich first for baseline, then LLM enrich top candidates
-      const heuristicEnriched = analyzed.map(c => enrichCandidate(c));
-      const preScored = scoreAll(heuristicEnriched);
-      const preSorted = [...preScored].sort((a, b) => b.scores.final - a.scores.final);
-      const topForLLM = preSorted.filter(c => !c.rejected).slice(0, 5);
-      const llmEnriched = await Promise.all(topForLLM.map(c => llmEnrichCandidate(c)));
-      const llmMap = new Map(llmEnriched.map(c => [c.id, c]));
-      enriched = preSorted.map(c => llmMap.get(c.id) ?? c);
-    } else {
-      enriched = analyzed.map(c => enrichCandidate(c));
-    }
+    // Heuristic enrich all candidates
+    const enriched = analyzed.map(c => enrichCandidate(c));
+
+    // Extract competitors
+    const withCompetitors = await extractCompetitorsAll(enriched);
 
     // Score
-    const scored = scoreAll(enriched);
+    const scored = scoreAll(withCompetitors);
 
     // Confidence
     const withConfidence = scored.map(c => {
@@ -115,13 +119,8 @@ export async function POST(req: NextRequest) {
     // Rank
     const ranked = rankCandidates(filtered);
 
-    // Deep validation on top 5 (LLM only — thorough mode has 300s timeout)
-    const validated = isLLMAvailable()
-      ? await deepValidateTop(ranked, 5)
-      : ranked;
-
     const apiCost = getCostTracker();
-    return NextResponse.json({ candidates: validated, apiCost });
+    return NextResponse.json({ candidates: ranked, apiCost });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Analysis failed' },
